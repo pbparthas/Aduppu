@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<meta name="theme-color" content="#b5541c"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="Aduppu"/>
+<title>Aduppu</title>
+<link id="manifest-link" rel="manifest" href="#"/>
+<link href="https://fonts.googleapis.com/css2?family=Crimson+Text:wght@400;600;700&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{--pri:#b5541c;--pri2:#e07b39;--bg:#fdf6ec;--card:#fff;--border:rgba(181,84,28,.12);}
+body{font-family:'Crimson Text',Georgia,serif;background:var(--bg);color:#2d1a0e;min-height:100vh;padding-bottom:80px;}
+button{cursor:pointer;font-family:inherit;transition:opacity .15s,transform .1s;}
+button:active{transform:scale(.97);}
+input,select,textarea{font-family:inherit;outline:none;}
+input:focus,select:focus,textarea:focus{border-color:var(--pri)!important;box-shadow:0 0 0 3px rgba(181,84,28,.12);}
+
+/* ── Header ── */
+#hdr{background:linear-gradient(135deg,#b5541c,#e07b39 55%,#c96020);padding:env(safe-area-inset-top,14px) 20px 0;padding-top:max(env(safe-area-inset-top),14px);box-shadow:0 4px 18px rgba(181,84,28,.3);}
+#hdr-inner{max-width:700px;margin:0 auto;}
+#hdr h1{font-size:22px;font-weight:700;color:#fff;margin-bottom:1px;}
+#hdr p{font-size:10px;color:rgba(255,255,255,.72);letter-spacing:2px;text-transform:uppercase;margin-bottom:12px;}
+.tabs{display:flex;gap:2px;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.tabs::-webkit-scrollbar{display:none;}
+.tab-btn{padding:9px 14px;border:none;font-size:12px;font-weight:700;border-radius:8px 8px 0 0;background:rgba(255,255,255,.15);color:rgba(255,255,255,.85);white-space:nowrap;flex-shrink:0;}
+.tab-btn.active{background:var(--bg);color:var(--pri);}
+
+/* ── Body ── */
+#body{padding:16px 16px;max-width:700px;margin:0 auto;}
+.tab-panel{display:none;}
+.tab-panel.active{display:block;}
+
+/* ── Cards ── */
+.card{background:var(--card);border-radius:14px;padding:16px;margin-bottom:12px;box-shadow:0 2px 12px rgba(181,84,28,.07);border:1px solid var(--border);}
+.card-hdr{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:14px;}
+h2{font-size:16px;font-weight:700;color:var(--pri);}
+h3{font-size:14px;font-weight:700;color:var(--pri);margin-bottom:10px;}
+
+/* ── Buttons ── */
+.btn{background:var(--pri);color:#fff;border:none;border-radius:9px;padding:9px 16px;font-size:13px;font-weight:700;letter-spacing:.2px;}
+.btn:hover{opacity:.88;}
+.btn-sm{background:var(--pri2);color:#fff;border:none;border-radius:6px;padding:4px 8px;font-size:11px;font-weight:700;}
+.btn-outline{background:transparent;color:var(--pri);border:1.5px solid var(--pri);border-radius:9px;padding:8px 14px;font-size:13px;font-weight:700;}
+.btn-outline.active{background:var(--pri);color:#fff;}
+.btn-del{background:transparent;color:#c0392b;border:1px solid #f0c0b0;border-radius:6px;padding:3px 8px;font-size:11px;}
+.btn-tiny{background:var(--pri2);color:#fff;border:none;border-radius:5px;padding:2px 5px;font-size:10px;font-weight:700;}
+.view-toggle{display:flex;background:#f0e6d8;border-radius:8px;padding:2px;gap:2px;}
+.view-toggle button{background:transparent;color:var(--pri);border:none;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:700;}
+.view-toggle button.active{background:var(--pri);color:#fff;}
+
+/* ── Forms ── */
+.lbl{font-size:11px;font-weight:700;color:#8c5a30;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px;}
+input[type=text],input[type=number],input[type=date],select,textarea{
+  border:1.5px solid #e0c9b0;border-radius:9px;padding:9px 12px;font-size:14px;
+  background:#fffaf5;color:#2d1a0e;width:100%;}
+textarea{resize:vertical;min-height:60px;}
+.form-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;}
+.fc{flex:1;min-width:130px;}
+.fc-wide{flex:2;min-width:180px;}
+.fc-auto{flex:0 0 auto;}
+.form-group{margin-bottom:10px;}
+
+/* ── Today Card ── */
+.today-meal{background:linear-gradient(135deg,#fffaf5,#fff);border:1px solid #edd9be;border-radius:12px;padding:13px 14px;margin-bottom:10px;}
+.today-meal-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+.today-plan{font-size:13px;color:#6b4226;margin-bottom:6px;}
+.today-plan span{font-weight:600;color:#2d1a0e;}
+.today-actual{font-size:13px;}
+.actual-logged{display:flex;align-items:center;gap:8px;padding:5px 8px;background:#f0faf2;border-radius:8px;margin-top:4px;}
+.actual-logged-dish{flex:1;font-weight:600;font-size:13px;}
+.btn-log-quick{background:var(--pri);color:#fff;border:none;border-radius:7px;padding:5px 11px;font-size:12px;font-weight:700;}
+
+/* ── Planner grid ── */
+.scroll-x{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.grid7{display:grid;grid-template-columns:repeat(7,minmax(100px,1fr));gap:8px;min-width:720px;}
+.day-card{background:#fffaf5;border:1px solid #e8d5be;border-radius:10px;padding:10px;}
+.day-card.today-highlight{border-color:var(--pri);box-shadow:0 0 0 2px rgba(181,84,28,.15);}
+.day-name{font-size:10px;font-weight:700;color:var(--pri);text-transform:uppercase;letter-spacing:1px;}
+.day-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+.meal-slot{margin-bottom:7px;}
+.meal-lbl-tiny{font-size:9px;color:#a07050;text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px;}
+.meal-val-row{display:flex;justify-content:space-between;align-items:flex-start;gap:3px;}
+.meal-val{font-size:11px;color:#2d1a0e;flex:1;line-height:1.3;}
+.meal-actual-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#2e7d32;margin-left:3px;vertical-align:middle;flex-shrink:0;}
+
+/* ── Day view ── */
+.day-pills{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.meal-box{background:linear-gradient(135deg,#fff8f4,#fff);border:1px solid var(--border);border-radius:12px;padding:14px;}
+.meal-box-dish{font-size:15px;font-weight:600;min-height:26px;margin:8px 0 10px;}
+.meal-box-actual{font-size:12px;color:#2e7d32;margin-bottom:8px;padding:5px 8px;background:#f0faf2;border-radius:7px;}
+
+/* ── Suggest ── */
+.dish-grid{display:flex;flex-wrap:wrap;gap:10px;}
+.dish-card-full{background:#f1faf3;border:1px solid #a8d5b0;border-radius:10px;padding:10px 13px;min-width:140px;}
+.dish-card-partial{background:#fffde7;border:1px solid #f0c040;border-radius:10px;padding:10px 13px;min-width:140px;}
+.dish-name{font-weight:700;font-size:14px;margin-bottom:4px;}
+.dish-ing{font-size:11px;color:#555;margin-top:5px;}
+.dish-missing{font-size:11px;color:#c0392b;margin-top:4px;}
+
+/* ── Dishes ── */
+.dish-tag{background:#fffaf5;border:1px solid #e8d5be;border-radius:8px;padding:8px 11px;display:flex;align-items:center;gap:10px;}
+.dish-tag-name{font-weight:600;font-size:13px;}
+.dish-tag-ing{font-size:11px;color:#a07050;}
+
+/* ── Pills ── */
+.pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;}
+.pb{background:#fff3e0;color:#e65100;}
+.pl{background:#e8f5e9;color:#2e7d32;}
+.pd{background:#e8eaf6;color:#3949ab;}
+.phome{background:#e8f5e9;color:#2e7d32;}
+.pout{background:#fce4ec;color:#c62828;}
+
+/* ── Stats ── */
+.stats-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:12px;}
+.stat-box{background:linear-gradient(135deg,#fff8f4,#fff);border:1px solid var(--border);border-radius:12px;padding:13px 15px;text-align:center;}
+.stat-num{font-size:24px;font-weight:700;color:var(--pri);}
+.stat-unit{font-size:11px;color:#a07050;}
+.stat-lbl{font-size:10px;color:#8c5a30;text-transform:uppercase;letter-spacing:.5px;margin-top:2px;}
+
+/* ── Track log ── */
+.track-row{display:flex;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid #f5ece0;font-size:13px;flex-wrap:wrap;}
+.track-dish{flex:1;min-width:80px;font-weight:600;}
+.divider{border-top:1px solid #f0e0cc;margin:12px 0;}
+.note-txt{font-size:12px;color:#7a5030;font-style:italic;margin-top:2px;}
+
+/* ── Toast ── */
+#toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%) translateY(20px);background:#2d1a0e;color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;font-weight:600;opacity:0;transition:all .3s;pointer-events:none;z-index:999;white-space:nowrap;}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+/* ── Bottom Nav (mobile) ── */
+#bottom-nav{display:none;position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #e8d5be;padding:6px 0 max(6px,env(safe-area-inset-bottom));z-index:100;box-shadow:0 -2px 10px rgba(0,0,0,.08);}
+#bottom-nav .nav-items{display:flex;justify-content:space-around;}
+.nav-item{display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 12px;border:none;background:transparent;font-family:inherit;color:#a07050;font-size:10px;font-weight:700;cursor:pointer;}
+.nav-item.active{color:var(--pri);}
+.nav-item .icon{font-size:20px;}
+
+/* ── Accordion ── */
+.accordion-header{display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none;}
+.accordion-content{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;}
+
+/* ── Install banner ── */
+#install-banner{display:none;background:linear-gradient(135deg,#fff8f0,#fff3e8);border:1px solid #f0c090;border-radius:12px;padding:13px 15px;margin-bottom:12px;align-items:center;gap:12px;}
+#install-banner.show{display:flex;}
+#install-banner p{flex:1;font-size:13px;color:#6b3a1f;}
+#install-banner strong{display:block;font-size:14px;color:var(--pri);margin-bottom:2px;}
+
+.empty{text-align:center;padding:24px 0;color:#b07050;font-size:14px;font-style:italic;}
+.success-msg{font-size:12px;color:#2e7d32;margin-top:6px;}
+
+@media(max-width:600px){
+  #bottom-nav{display:block;}
+  .tabs{display:none;}
+  #hdr p{display:none;}
+  .stats-grid{grid-template-columns:repeat(2,1fr);}
+  .grid3{grid-template-columns:1fr;}
+  .form-row{flex-direction:column;}
+  .fc,.fc-wide,.fc-auto{min-width:0;width:100%;}
+}
+</style>
+</head>
+<body>
+
+<div id="hdr">
+  <div id="hdr-inner">
+    <h1>🔥 Aduppu</h1>
+    <p>Your kitchen, your rhythm.</p>
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('today')">🌤 Today</button>
+      <button class="tab-btn" onclick="switchTab('planner')">📅 Plan</button>
+      <button class="tab-btn" onclick="switchTab('suggest')">🥘 Suggest</button>
+      <button class="tab-btn" onclick="switchTab('dishes')">📋 Dishes</button>
+      <button class="tab-btn" onclick="switchTab('track')">💰 Track</button>
+    </div>
+  </div>
+</div>
+
+<div id="body">
+
+  <!-- Install banner -->
+  <div id="install-banner">
+    <div style="font-size:28px;">📲</div>
+    <div style="flex:1;">
+      <strong>Install as App</strong>
+      <p style="margin:0;font-size:12px;color:#7a5030;">Tap <b>Share → Add to Home Screen</b> (iOS) or the install icon in your browser address bar (Android/Chrome) to use this offline.</p>
+    </div>
+    <button class="btn-del" onclick="document.getElementById('install-banner').classList.remove('show')">✕</button>
+  </div>
+
+  <!-- ═══ TODAY ═══ -->
+  <div id="tab-today" class="tab-panel active">
+    <div class="card">
+      <div class="card-hdr">
+        <div>
+          <h2>🌤 Today</h2>
+          <div id="today-date-label" style="font-size:12px;color:#a07050;margin-top:2px;"></div>
+        </div>
+        <button class="btn-sm" onclick="randomizeToday()">🎲 Randomize</button>
+      </div>
+      <div id="today-meals"></div>
+    </div>
+
+    <!-- Quick log what you ate -->
+    <div class="card">
+      <h3>✏️ Log What You Had</h3>
+      <div class="form-group">
+        <label class="lbl">Meal</label>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button id="ql-b" class="btn-outline active" onclick="setQLMeal('breakfast')">🌅 Breakfast</button>
+          <button id="ql-l" class="btn-outline" onclick="setQLMeal('lunch')">☀️ Lunch</button>
+          <button id="ql-d" class="btn-outline" onclick="setQLMeal('dinner')">🌙 Dinner</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="lbl">What did you have?</label>
+        <input type="text" id="ql-dish" placeholder="e.g. Idli with sambar and chutney"/>
+      </div>
+      <div class="form-group">
+        <label class="lbl">Type</label>
+        <div style="display:flex;gap:8px;">
+          <button id="ql-home" class="btn-outline active" style="flex:1;" onclick="setQLType('home')">🏠 Cooked</button>
+          <button id="ql-out" class="btn-outline" style="flex:1;" onclick="setQLType('out')">🛵 Ordered</button>
+        </div>
+      </div>
+      <div id="ql-cost-row" style="display:none;" class="form-group">
+        <label class="lbl">Amount Spent (₹)</label>
+        <input type="number" id="ql-cost" placeholder="0"/>
+      </div>
+      <div class="form-group">
+        <label class="lbl">Notes (optional)</label>
+        <textarea id="ql-notes" placeholder="How was it? Any tweaks?"></textarea>
+      </div>
+      <button class="btn" style="width:100%;" onclick="quickLog()">Log Meal ✓</button>
+    </div>
+
+    <!-- Today's log -->
+    <div id="today-log-card"></div>
+  </div>
+
+  <!-- ═══ PLANNER ═══ -->
+  <div id="tab-planner" class="tab-panel">
+    <div class="card">
+      <div class="card-hdr">
+        <h2>📅 Weekly Plan</h2>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <div class="view-toggle">
+            <button id="vbtn-grid" class="active" onclick="setPlanView('grid')">Grid</button>
+            <button id="vbtn-day" onclick="setPlanView('day')">Day</button>
+          </div>
+          <button class="btn" onclick="randomizeWeek()">🎲 Week</button>
+        </div>
+      </div>
+      <div id="plan-grid-view">
+        <div class="scroll-x"><div class="grid7" id="plan-grid"></div></div>
+      </div>
+      <div id="plan-day-view" style="display:none;">
+        <div class="day-pills" id="day-pills"></div>
+        <div class="grid3" id="day-meals"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ SUGGEST ═══ -->
+  <div id="tab-suggest" class="tab-panel">
+    <div class="card">
+      <h2 style="margin-bottom:12px;">🧺 What's in your kitchen?</h2>
+      <label class="lbl">Ingredients available (comma separated)</label>
+      <div style="display:flex;gap:10px;margin-bottom:8px;">
+        <input type="text" id="ing-input" placeholder="e.g. rice, urad dal, coconut, tomato" onkeydown="if(event.key==='Enter')findDishes()"/>
+        <button class="btn" style="white-space:nowrap;" onclick="findDishes()">Find</button>
+      </div>
+      <div id="ing-confirm" style="font-size:12px;color:#2e7d32;"></div>
+    </div>
+    <div id="sugg-results"></div>
+  </div>
+
+  <!-- ═══ DISHES ═══ -->
+  <div id="tab-dishes" class="tab-panel">
+    <div class="card">
+      <h2 style="margin-bottom:12px;">➕ Add Dish</h2>
+      <div class="form-row">
+        <div class="fc">
+          <label class="lbl">Dish Name</label>
+          <input type="text" id="new-name" placeholder="e.g. Kara Kuzhambu"/>
+        </div>
+        <div class="fc-auto">
+          <label class="lbl">Meal</label>
+          <select id="new-meal">
+            <option value="breakfast">Breakfast</option>
+            <option value="lunch">Lunch</option>
+            <option value="dinner">Dinner</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="lbl">Ingredients (comma separated)</label>
+        <input type="text" id="new-ing" placeholder="e.g. tamarind, onion, coconut"/>
+      </div>
+      <button class="btn" onclick="addDish()">Add Dish</button>
+      <div id="add-msg" class="success-msg"></div>
+    </div>
+    <div id="dishes-list"></div>
+  </div>
+
+  <!-- ═══ TRACK ═══ -->
+  <div id="tab-track" class="tab-panel">
+    <div class="stats-grid" id="stats-grid"></div>
+
+    <!-- Grocery log -->
+    <div class="card">
+      <h3>🛒 Log Grocery Spend</h3>
+      <div class="form-row">
+        <div class="fc">
+          <label class="lbl">Date</label>
+          <input type="date" id="g-date"/>
+        </div>
+        <div class="fc">
+          <label class="lbl">Amount (₹)</label>
+          <input type="number" id="g-amount" placeholder="0"/>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="lbl">Note (optional)</label>
+        <input type="text" id="g-note" placeholder="e.g. weekly vegetables, rice…"/>
+      </div>
+      <button class="btn" onclick="logGrocery()">Add Entry</button>
+      <div id="grocery-recent"></div>
+    </div>
+
+    <!-- Full meal log -->
+    <div id="meal-log-card"></div>
+  </div>
+
+</div>
+
+<!-- Bottom nav (mobile) -->
+<div id="bottom-nav">
+  <div class="nav-items">
+    <button class="nav-item active" onclick="switchTab('today')"><span class="icon">🌤</span>Today</button>
+    <button class="nav-item" onclick="switchTab('planner')"><span class="icon">📅</span>Plan</button>
+    <button class="nav-item" onclick="switchTab('suggest')"><span class="icon">🥘</span>Suggest</button>
+    <button class="nav-item" onclick="switchTab('dishes')"><span class="icon">📋</span>Dishes</button>
+    <button class="nav-item" onclick="switchTab('track')"><span class="icon">💰</span>Track</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ─────────────────────────────────────────────
+// PWA — inject manifest blob + register SW
+// ─────────────────────────────────────────────
+const MANIFEST = {
+  name:"Aduppu",
+  short_name:"Aduppu",
+  description:"Your kitchen, your rhythm.",
+  start_url:"./",
+  display:"standalone",
+  background_color:"#fdf6ec",
+  theme_color:"#b5541c",
+  orientation:"portrait-primary",
+  icons:[
+    {src:"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%23b5541c'/%3E%3Ctext y='.9em' font-size='72' x='10'%3E🍚%3C/text%3E%3C/svg%3E",sizes:"192x192",type:"image/svg+xml"},
+    {src:"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%23b5541c'/%3E%3Ctext y='.9em' font-size='72' x='10'%3E🍚%3C/text%3E%3C/svg%3E",sizes:"512x512",type:"image/svg+xml"}
+  ]
+};
+const mblob = new Blob([JSON.stringify(MANIFEST)],{type:"application/json"});
+document.getElementById("manifest-link").href = URL.createObjectURL(mblob);
+
+const SW_CODE = `
+const CACHE="aduppu-v1";
+const ASSETS=["./"];
+self.addEventListener("install",e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)));self.skipWaiting();});
+self.addEventListener("activate",e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==CACHE).map(k=>caches.delete(k)))));self.clients.claim();});
+self.addEventListener("fetch",e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request).then(res=>{if(res.ok&&e.request.method==="GET"){const c=res.clone();caches.open(CACHE).then(ca=>ca.put(e.request,c));}return res;}).catch(()=>caches.match("./"))));});
+`;
+if('serviceWorker' in navigator){
+  const swblob = new Blob([SW_CODE],{type:"text/javascript"});
+  navigator.serviceWorker.register(URL.createObjectURL(swblob)).catch(()=>{});
+}
+
+// ─────────────────────────────────────────────
+// Install prompt
+// ─────────────────────────────────────────────
+let deferredPrompt=null;
+window.addEventListener("beforeinstallprompt",e=>{
+  e.preventDefault(); deferredPrompt=e;
+  document.getElementById("install-banner").classList.add("show");
+});
+// Show install tip on iOS (no beforeinstallprompt)
+const isIOS=/iphone|ipad|ipod/i.test(navigator.userAgent);
+const isStandalone=window.matchMedia("(display-mode:standalone)").matches||navigator.standalone;
+if(isIOS&&!isStandalone) document.getElementById("install-banner").classList.add("show");
+
+// ─────────────────────────────────────────────
+// Data
+// ─────────────────────────────────────────────
+function lsGet(k,fb){try{const v=localStorage.getItem(k);return v?JSON.parse(v):fb;}catch{return fb;}}
+function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch{}}
+
+const K={DISHES:"aduppu_dishes",PLAN:"aduppu_plan",TRACK:"aduppu_track",GROCERY:"aduppu_grocery"};
+
+const DEFAULTS={
+  breakfast:[
+    {id:1,name:"Idli",ingredients:["rice","urad dal","salt"]},
+    {id:2,name:"Dosa",ingredients:["rice","urad dal","oil","salt"]},
+    {id:3,name:"Pongal",ingredients:["rice","moong dal","ghee","pepper","cumin","ginger"]},
+    {id:4,name:"Upma",ingredients:["rava","onion","green chilli","mustard","curry leaves","oil"]},
+    {id:5,name:"Idiyappam",ingredients:["rice flour","salt","oil"]},
+    {id:6,name:"Poori",ingredients:["wheat flour","oil","salt"]},
+    {id:7,name:"Kichadi",ingredients:["rava","curd","onion","green chilli","mustard","curry leaves"]},
+    {id:8,name:"Adai",ingredients:["rice","chana dal","urad dal","red chilli","curry leaves"]},
+  ],
+  lunch:[
+    {id:101,name:"Sambar Rice",ingredients:["rice","toor dal","tomato","tamarind","onion","sambar powder"]},
+    {id:102,name:"Rasam Rice",ingredients:["rice","tomato","tamarind","pepper","cumin","garlic"]},
+    {id:103,name:"Curd Rice",ingredients:["rice","curd","mustard","curry leaves","green chilli","ginger"]},
+    {id:104,name:"Lemon Rice",ingredients:["rice","lemon","turmeric","peanuts","mustard","curry leaves"]},
+    {id:105,name:"Tamarind Rice",ingredients:["rice","tamarind","peanuts","mustard","curry leaves","sesame"]},
+    {id:106,name:"Kootu",ingredients:["vegetables","coconut","urad dal","mustard","curry leaves"]},
+    {id:107,name:"Kara Kuzhambu",ingredients:["tamarind","onion","tomato","coconut","kuzhambu powder","oil"]},
+    {id:108,name:"Mor Kuzhambu",ingredients:["curd","coconut","cumin","green chilli","turmeric"]},
+    {id:109,name:"Paruppu Rice",ingredients:["rice","toor dal","ghee","pepper","cumin","mustard"]},
+  ],
+  dinner:[
+    {id:201,name:"Chapati with Kurma",ingredients:["wheat flour","vegetables","coconut milk","onion","tomato","spices"]},
+    {id:202,name:"Idli with Chutney",ingredients:["rice","urad dal","salt","coconut","green chilli"]},
+    {id:203,name:"Dosa with Chutney",ingredients:["rice","urad dal","coconut","green chilli"]},
+    {id:204,name:"Ven Pongal",ingredients:["rice","moong dal","ghee","pepper","cumin"]},
+    {id:205,name:"Roti with Dal",ingredients:["wheat flour","toor dal","tomato","onion","spices"]},
+    {id:206,name:"Upma",ingredients:["rava","onion","green chilli","mustard","curry leaves","oil"]},
+    {id:207,name:"Pesarattu",ingredients:["green moong dal","green chilli","ginger","onion","oil"]},
+    {id:208,name:"Parotta with Salna",ingredients:["wheat flour","oil","onion","tomato","spices","coconut milk"]},
+  ]
+};
+
+const DAYS=["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
+const MEALS=["breakfast","lunch","dinner"];
+const ME={breakfast:"🌅",lunch:"☀️",dinner:"🌙"};
+const MLABEL={breakfast:"Breakfast",lunch:"Lunch",dinner:"Dinner"};
+const MPILL={breakfast:"pb",lunch:"pl",dinner:"pd"};
+
+let dishes=lsGet(K.DISHES,DEFAULTS);
+let plan=lsGet(K.PLAN,{});
+let trackLog=lsGet(K.TRACK,[]);
+let grocery=lsGet(K.GROCERY,[]);
+
+let planView="grid";
+let selDay=todayName();
+let trackType="home";
+let qlMeal="breakfast";
+let qlType="home";
+let accordion={breakfast:true,lunch:false,dinner:false};
+
+function today(){return new Date().toISOString().split("T")[0];}
+function todayName(){const d=new Date();return DAYS[d.getDay()===0?6:d.getDay()-1];}
+
+// ─────────────────────────────────────────────
+// Toast
+// ─────────────────────────────────────────────
+function toast(msg){
+  const t=document.getElementById("toast");
+  t.textContent=msg; t.classList.add("show");
+  setTimeout(()=>t.classList.remove("show"),2500);
+}
+
+// ─────────────────────────────────────────────
+// Tab switching
+// ─────────────────────────────────────────────
+function switchTab(t){
+  document.querySelectorAll(".tab-panel").forEach(p=>p.classList.remove("active"));
+  document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
+  document.querySelectorAll(".nav-item").forEach(b=>b.classList.remove("active"));
+  document.getElementById("tab-"+t).classList.add("active");
+  const TABS=["today","planner","suggest","dishes","track"];
+  const i=TABS.indexOf(t);
+  if(i>=0){
+    document.querySelectorAll(".tab-btn")[i]?.classList.add("active");
+    document.querySelectorAll(".nav-item")[i]?.classList.add("active");
+  }
+  if(t==="today") renderToday();
+  if(t==="planner") renderPlan();
+  if(t==="dishes") renderDishes();
+  if(t==="track") renderTrack();
+}
+
+// ─────────────────────────────────────────────
+// Ingredient matching
+// ─────────────────────────────────────────────
+function tokenize(s){return s.toLowerCase().trim().split(/\s+/);}
+function ingMatches(req,availList){
+  const rt=tokenize(req);
+  return availList.some(a=>{const at=tokenize(a);return rt.some(r=>at.some(t=>t.includes(r)||r.includes(t)));});
+}
+function scoreMatch(dish,avail){
+  if(!avail.length) return{type:"unknown",score:0,missing:[]};
+  const matched=dish.ingredients.filter(r=>ingMatches(r,avail));
+  const missing=dish.ingredients.filter(r=>!ingMatches(r,avail));
+  const score=matched.length/dish.ingredients.length;
+  return{type:score===1?"full":score>=0.5?"partial":"low",score,missing};
+}
+
+// ─────────────────────────────────────────────
+// TODAY tab
+// ─────────────────────────────────────────────
+function randomizeToday(){
+  const day=todayName();
+  MEALS.forEach(m=>{
+    const pool=dishes[m];if(!pool.length)return;
+    const pick=pool[Math.floor(Math.random()*pool.length)];
+    if(!plan[day])plan[day]={};
+    plan[day][m]=pick.name;
+  });
+  lsSet(K.PLAN,plan);
+  renderToday();
+  toast("Today's meals randomized 🎲");
+}
+
+function setQLMeal(m){
+  qlMeal=m;
+  ["breakfast","lunch","dinner"].forEach(x=>{
+    document.getElementById("ql-"+x[0]).classList.toggle("active",x===m);
+  });
+}
+function setQLType(t){
+  qlType=t;
+  document.getElementById("ql-home").classList.toggle("active",t==="home");
+  document.getElementById("ql-out").classList.toggle("active",t==="out");
+  document.getElementById("ql-cost-row").style.display=t==="out"?"block":"none";
+}
+function quickLog(){
+  const dish=document.getElementById("ql-dish").value.trim();
+  if(!dish){toast("Please enter what you had");return;}
+  const entry={
+    id:Date.now(),
+    date:today(),
+    meal:qlMeal,
+    type:qlType,
+    dish,
+    cost:qlType==="out"?parseFloat(document.getElementById("ql-cost").value)||0:0,
+    notes:document.getElementById("ql-notes").value.trim()
+  };
+  trackLog.unshift(entry);
+  lsSet(K.TRACK,trackLog);
+  document.getElementById("ql-dish").value="";
+  document.getElementById("ql-cost").value="";
+  document.getElementById("ql-notes").value="";
+  toast("✓ Logged: "+dish);
+  renderToday();
+  renderTrack();
+}
+
+function renderToday(){
+  const day=todayName();
+  const d=new Date();
+  document.getElementById("today-date-label").textContent=
+    d.toLocaleDateString("en-IN",{weekday:"long",day:"numeric",month:"long"});
+
+  const todayEntries=trackLog.filter(t=>t.date===today());
+
+  const html=MEALS.map(meal=>{
+    const planned=plan[day]?.[meal]||null;
+    const logged=todayEntries.filter(t=>t.meal===meal);
+    return `<div class="today-meal">
+      <div class="today-meal-hdr">
+        <span class="pill ${MPILL[meal]}">${ME[meal]} ${MLABEL[meal]}</span>
+        <button class="btn-tiny" onclick="randMeal('${day}','${meal}');renderToday()">🎲</button>
+      </div>
+      <div class="today-plan">Planned: <span>${planned||"<em style='color:#ccc;font-weight:400'>Not set</em>"}</span></div>
+      <div class="today-actual">
+        ${logged.length?logged.map(e=>`
+          <div class="actual-logged">
+            <span class="pill ${e.type==="home"?"phome":"pout"}">${e.type==="home"?"🏠":"🛵"}</span>
+            <span class="actual-logged-dish">${e.dish}</span>
+            ${e.cost?`<span style="font-weight:700;color:#c62828;font-size:12px;">₹${e.cost}</span>`:""}
+          </div>
+          ${e.notes?`<div class="note-txt">📝 ${e.notes}</div>`:""}
+        `).join(""):`<div style="font-size:12px;color:#bbb;font-style:italic;margin-top:4px;">Nothing logged yet</div>`}
+      </div>
+    </div>`;
+  }).join("");
+
+  document.getElementById("today-meals").innerHTML=html;
+
+  // Today's full log at bottom
+  const card=document.getElementById("today-log-card");
+  if(todayEntries.length){
+    card.innerHTML=`<div class="card">
+      <h3>📊 Today's Summary</h3>
+      <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+        <div style="background:#f0faf2;border-radius:8px;padding:8px 14px;text-align:center;">
+          <div style="font-size:20px;font-weight:700;color:#2e7d32;">${todayEntries.filter(t=>t.type==="home").length}</div>
+          <div style="font-size:10px;color:#5a8a5a;text-transform:uppercase;">Cooked</div>
+        </div>
+        <div style="background:#fce4ec;border-radius:8px;padding:8px 14px;text-align:center;">
+          <div style="font-size:20px;font-weight:700;color:#c62828;">${todayEntries.filter(t=>t.type==="out").length}</div>
+          <div style="font-size:10px;color:#a05050;text-transform:uppercase;">Ordered</div>
+        </div>
+        <div style="background:#fff3e0;border-radius:8px;padding:8px 14px;text-align:center;">
+          <div style="font-size:20px;font-weight:700;color:var(--pri);">₹${todayEntries.reduce((s,t)=>s+t.cost,0).toFixed(0)}</div>
+          <div style="font-size:10px;color:#a07030;text-transform:uppercase;">Spent</div>
+        </div>
+      </div>
+    </div>`;
+  } else { card.innerHTML=""; }
+}
+
+// ─────────────────────────────────────────────
+// PLANNER tab
+// ─────────────────────────────────────────────
+function randMeal(day,meal){
+  const pool=dishes[meal];if(!pool.length)return;
+  const pick=pool[Math.floor(Math.random()*pool.length)];
+  if(!plan[day])plan[day]={};
+  plan[day][meal]=pick.name;
+  lsSet(K.PLAN,plan);
+  renderPlan();
+}
+function randDay(day){MEALS.forEach(m=>randMeal(day,m));}
+function randomizeWeek(){DAYS.forEach(d=>randDay(d));toast("Week randomized 🎲");}
+
+function setPlanView(v){
+  planView=v;
+  document.getElementById("vbtn-grid").classList.toggle("active",v==="grid");
+  document.getElementById("vbtn-day").classList.toggle("active",v==="day");
+  document.getElementById("plan-grid-view").style.display=v==="grid"?"block":"none";
+  document.getElementById("plan-day-view").style.display=v==="day"?"block":"none";
+  renderPlan();
+}
+
+function renderPlan(){
+  const tn=todayName();
+  // Grid
+  document.getElementById("plan-grid").innerHTML=DAYS.map(day=>{
+    const isToday=day===tn;
+    const todayLogs=trackLog.filter(t=>t.date===today());
+    return`<div class="day-card${isToday?" today-highlight":""}">
+      <div class="day-hdr">
+        <span class="day-name">${day.slice(0,3)}${isToday?" •":""}</span>
+        <button class="btn-tiny" onclick="randDay('${day}')">🎲</button>
+      </div>
+      ${MEALS.map(meal=>{
+        const hasActual=isToday&&todayLogs.some(t=>t.meal===meal);
+        return`<div class="meal-slot">
+          <div class="meal-lbl-tiny">${ME[meal]} ${meal.slice(0,5)}</div>
+          <div class="meal-val-row">
+            <span class="meal-val">${plan[day]?.[meal]||'<span style="color:#ddd">—</span>'}${hasActual?'<span class="meal-actual-dot" title="Logged"></span>':''}</span>
+            <button class="btn-tiny" onclick="randMeal('${day}','${meal}')">↻</button>
+          </div>
+        </div>`;
+      }).join("")}
+    </div>`;
+  }).join("");
+
+  // Day pills
+  document.getElementById("day-pills").innerHTML=DAYS.map(d=>
+    `<button class="btn-outline${d===selDay?" active":""}" onclick="selectDay('${d}')">${d.slice(0,3)}</button>`
+  ).join("");
+
+  renderDayMeals();
+}
+
+function selectDay(d){selDay=d;renderPlan();}
+function renderDayMeals(){
+  const todayLogs=selDay===todayName()?trackLog.filter(t=>t.date===today()):[];
+  document.getElementById("day-meals").innerHTML=MEALS.map(meal=>{
+    const logged=todayLogs.filter(t=>t.meal===meal);
+    return`<div class="meal-box">
+      <span class="pill ${MPILL[meal]}">${ME[meal]} ${MLABEL[meal]}</span>
+      <div class="meal-box-dish">${plan[selDay]?.[meal]||'<span style="color:#ccc;font-style:italic;font-size:13px">Not set</span>'}</div>
+      ${logged.length?`<div class="meal-box-actual">✓ Had: ${logged.map(e=>e.dish).join(", ")}</div>`:""}
+      <button class="btn" onclick="randMeal('${selDay}','${meal}')">🎲 Randomize</button>
+    </div>`;
+  }).join("");
+}
+
+// ─────────────────────────────────────────────
+// SUGGEST tab
+// ─────────────────────────────────────────────
+function findDishes(){
+  const val=document.getElementById("ing-input").value;
+  const list=val.split(",").map(s=>s.trim()).filter(Boolean);
+  if(!list.length){toast("Enter at least one ingredient");return;}
+  document.getElementById("ing-confirm").textContent=
+    `✓ ${list.length} ingredient${list.length>1?"s":""}: ${list.join(", ")}`;
+  const full=[],partial=[];
+  MEALS.forEach(meal=>dishes[meal].forEach(dish=>{
+    const m=scoreMatch(dish,list);
+    if(m.type==="full") full.push({...dish,meal});
+    if(m.type==="partial") partial.push({...dish,meal,pct:Math.round(m.score*100),missing:m.missing});
+  }));
+  partial.sort((a,b)=>b.pct-a.pct);
+  let html="";
+  if(full.length){
+    html+=`<div class="card"><h2 style="margin-bottom:12px;">✅ Can cook now <span style="font-size:13px;color:#888;font-weight:400">— ${full.length}</span></h2>
+    <div class="dish-grid">${full.map(d=>`
+      <div class="dish-card-full">
+        <div class="dish-name">${d.name}</div>
+        <span class="pill ${MPILL[d.meal]}">${d.meal}</span>
+        <div class="dish-ing">${d.ingredients.join(", ")}</div>
+      </div>`).join("")}</div></div>`;
+  }
+  if(partial.length){
+    html+=`<div class="card"><h2 style="margin-bottom:12px;">⚡ Almost there <span style="font-size:13px;color:#888;font-weight:400">— ${partial.length}</span></h2>
+    <div class="dish-grid">${partial.map(d=>`
+      <div class="dish-card-partial">
+        <div class="dish-name">${d.name} <span style="font-size:11px;color:#aaa">${d.pct}%</span></div>
+        <span class="pill ${MPILL[d.meal]}">${d.meal}</span>
+        ${d.missing.length?`<div class="dish-missing">Need: ${d.missing.join(", ")}</div>`:""}
+      </div>`).join("")}</div></div>`;
+  }
+  if(!full.length&&!partial.length){
+    html=`<div class="card"><div class="empty">No matches. Try: rice, dal, onion, tomato, coconut</div></div>`;
+  }
+  document.getElementById("sugg-results").innerHTML=html;
+}
+
+// ─────────────────────────────────────────────
+// DISHES tab
+// ─────────────────────────────────────────────
+function addDish(){
+  const name=document.getElementById("new-name").value.trim();
+  const meal=document.getElementById("new-meal").value;
+  const ing=document.getElementById("new-ing").value.split(",").map(s=>s.trim()).filter(Boolean);
+  if(!name){toast("Enter a dish name");return;}
+  dishes[meal].push({id:Date.now(),name,ingredients:ing});
+  lsSet(K.DISHES,dishes);
+  document.getElementById("new-name").value="";
+  document.getElementById("new-ing").value="";
+  toast(`✓ "${name}" added to ${meal}`);
+  renderDishes();
+}
+function delDish(meal,id){
+  dishes[meal]=dishes[meal].filter(d=>d.id!==id);
+  lsSet(K.DISHES,dishes);
+  renderDishes();
+}
+function toggleAccordion(meal){accordion[meal]=!accordion[meal];renderDishes();}
+function renderDishes(){
+  document.getElementById("dishes-list").innerHTML=MEALS.map(meal=>`
+    <div class="card">
+      <div class="accordion-header" onclick="toggleAccordion('${meal}')">
+        <h2 style="margin-bottom:0;display:flex;align-items:center;gap:8px;">
+          <span class="pill ${MPILL[meal]}">${ME[meal]} ${MLABEL[meal]}</span>
+          <span style="font-size:13px;color:#aaa;font-weight:400">${dishes[meal].length}</span>
+        </h2>
+        <span style="color:var(--pri);font-size:15px;">${accordion[meal]?"▲":"▼"}</span>
+      </div>
+      ${accordion[meal]?`<div class="accordion-content">
+        ${dishes[meal].map(d=>`
+          <div class="dish-tag">
+            <div>
+              <div class="dish-tag-name">${d.name}</div>
+              <div class="dish-tag-ing">${d.ingredients.slice(0,4).join(", ")}${d.ingredients.length>4?` +${d.ingredients.length-4} more`:""}</div>
+            </div>
+            <button class="btn-del" onclick="delDish('${meal}',${d.id})">✕</button>
+          </div>`).join("")}
+      </div>`:""}
+    </div>`).join("");
+}
+
+// ─────────────────────────────────────────────
+// TRACK tab
+// ─────────────────────────────────────────────
+function logGrocery(){
+  const amount=parseFloat(document.getElementById("g-amount").value);
+  if(!amount){toast("Enter an amount");return;}
+  grocery.unshift({id:Date.now(),date:document.getElementById("g-date").value||today(),amount,note:document.getElementById("g-note").value.trim()});
+  lsSet(K.GROCERY,grocery);
+  document.getElementById("g-amount").value="";
+  document.getElementById("g-note").value="";
+  toast("✓ Grocery entry added");
+  renderTrack();
+}
+
+function renderTrack(){
+  const totalOut=trackLog.filter(t=>t.type==="out").reduce((s,t)=>s+t.cost,0);
+  const totalG=grocery.reduce((s,g)=>s+g.amount,0);
+  const homeC=trackLog.filter(t=>t.type==="home").length;
+  const outC=trackLog.filter(t=>t.type==="out").length;
+
+  document.getElementById("stats-grid").innerHTML=[
+    {l:"Home Cooked",v:homeC,u:"meals"},
+    {l:"Ordered Out",v:outC,u:"times"},
+    {l:"Order Spend",v:`₹${totalOut.toFixed(0)}`,u:""},
+    {l:"Grocery Spend",v:`₹${totalG.toFixed(0)}`,u:""},
+  ].map(s=>`<div class="stat-box">
+    <div class="stat-num">${s.v}</div>
+    ${s.u?`<div class="stat-unit">${s.u}</div>`:""}
+    <div class="stat-lbl">${s.l}</div>
+  </div>`).join("");
+
+  // Grocery recent
+  const gr=document.getElementById("grocery-recent");
+  if(grocery.length){
+    gr.innerHTML=`<div class="divider"></div>
+    <div style="font-size:11px;font-weight:700;color:#8c5a30;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">Recent Entries</div>`+
+    grocery.slice(0,5).map(g=>`
+      <div class="track-row">
+        <span style="color:#a07050;font-size:12px;min-width:80px;">${g.date}</span>
+        <span style="flex:1;">${g.note||"Groceries"}</span>
+        <span style="font-weight:700;color:#2e7d32;">₹${g.amount}</span>
+      </div>`).join("");
+  } else { gr.innerHTML=""; }
+
+  // Meal log
+  const ml=document.getElementById("meal-log-card");
+  if(trackLog.length){
+    ml.innerHTML=`<div class="card">
+      <h3>📋 All Meal Logs</h3>`+
+      trackLog.slice(0,50).map(t=>`
+        <div class="track-row">
+          <span style="color:#a07050;font-size:11px;min-width:76px;">${t.date}</span>
+          <span class="pill ${MPILL[t.meal]}">${ME[t.meal]}</span>
+          <span class="pill ${t.type==="home"?"phome":"pout"}">${t.type==="home"?"🏠":"🛵"}</span>
+          <span class="track-dish">${t.dish}</span>
+          ${t.cost?`<span style="font-weight:700;color:#c62828;font-size:12px;">₹${t.cost}</span>`:""}
+        </div>
+        ${t.notes?`<div class="note-txt" style="padding-left:8px;margin-bottom:4px;">📝 ${t.notes}</div>`:""}
+      `).join("")+"</div>";
+  } else { ml.innerHTML=""; }
+}
+
+// ─────────────────────────────────────────────
+// Init
+// ─────────────────────────────────────────────
+document.getElementById("g-date").value=today();
+selDay=todayName();
+renderToday();
+renderPlan();
+renderDishes();
+renderTrack();
+</script>
+</body>
+</html>
