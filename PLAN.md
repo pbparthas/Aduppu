@@ -459,10 +459,10 @@ ingredient list that prefills the pantry chips in Cook → "From my kitchen".
 (randomizer, matching, shopping list) is deterministic code. Keep the
 provider fully swappable: the app contract is only `POST /vision` →
 `{ ingredients: string[] }`, and the model call must live in one function in
-the Worker (`callVisionModel(image, mediaType) -> string[]`) so switching to
-another vision-capable LLM (Gemini, OpenAI, self-hosted) is a one-function
-edit plus a secret swap. If no vision secret is configured, return 501 —
-the app hides the scan button and works fully without AI.
+the Worker (`callVisionModel(env, image, mediaType) -> string[]`) so
+switching to another vision-capable LLM (Claude, OpenAI, self-hosted) is a
+one-function edit plus a secret swap. If no vision secret is configured,
+return 501 — the app hides the scan button and works fully without AI.
 
 **Architecture:** the browser never holds an AI API key. Add one endpoint to
 the existing auth Worker (`aduppu/worker`), which already holds secrets and
@@ -470,37 +470,55 @@ allowlists origins:
 
 - `POST /vision` — body `{ image: <base64 jpeg>, media_type: 'image/jpeg' }`.
   Auth: require a valid `ad_session` cookie (same KV lookup as `/refresh`) AND
-  the CORS origin allowlist — the endpoint spends money, so anonymous calls
-  must 401. Rate-limit via KV counter (e.g. key `vision:<date>`, max 30/day,
-  429 beyond).
-- Worker calls the Claude API with the official TypeScript SDK
-  (`@anthropic-ai/sdk` — fetch-based, runs on Cloudflare Workers). API key via
-  `wrangler secret put ANTHROPIC_API_KEY`. Model: **`claude-opus-4-8`**.
-  Use structured outputs so the reply is guaranteed-parseable JSON:
+  the CORS origin allowlist — never serve anonymous calls (401). Rate-limit
+  via KV counter (e.g. key `vision:<date>`, max 30/day, 429 beyond) — the
+  free tier has daily request caps, so the limiter protects the quota.
+- **Provider (owner decision, 2026-07-09): Gemini free tier.** Worker calls
+  the Gemini API via plain `fetch` (keeps the Worker zero-dependency, same
+  style as the auth code). Key via `wrangler secret put GEMINI_API_KEY`
+  (create free at https://aistudio.google.com/apikey). Model: the current
+  free-tier Flash model — `gemini-2.5-flash` as of this writing; verify the
+  current free-tier model id when implementing. Use a JSON response schema so
+  the reply is guaranteed-parseable:
 
   ```js
-  const msg = await anthropic.messages.create({
-    model: 'claude-opus-4-8',
-    max_tokens: 1024,
-    output_config: { format: { type: 'json_schema', schema: {
-      type: 'object',
-      properties: { ingredients: { type: 'array', items: { type: 'string' } } },
-      required: ['ingredients'], additionalProperties: false,
-    } } },
-    messages: [{ role: 'user', content: [
-      { type: 'image', source: { type: 'base64', media_type, data: image } },
-      { type: 'text', text:
-        'List every food ingredient you can identify in this photo of a home kitchen. ' +
-        'Use common English grocery names in lowercase singular form (e.g. "tomato", ' +
-        '"toor dal", "curry leaves", "rice flour"). Indian/South Indian household context. ' +
-        'Only include items you can actually see; do not guess at closed containers.' },
-    ] }],
-  });
-  const { ingredients } = JSON.parse(msg.content.find(b => b.type === 'text').text);
+  const PROMPT =
+    'List every food ingredient you can identify in this photo of a home kitchen. ' +
+    'Use common English grocery names in lowercase singular form (e.g. "tomato", ' +
+    '"toor dal", "curry leaves", "rice flour"). Indian/South Indian household context. ' +
+    'Only include items you can actually see; do not guess at closed containers.';
+
+  async function callVisionModel(env, image, mediaType) {
+    const r = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY },
+        body: JSON.stringify({
+          contents: [{ parts: [
+            { inline_data: { mime_type: mediaType, data: image } },
+            { text: PROMPT },
+          ] }],
+          generationConfig: {
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: 'OBJECT',
+              properties: { ingredients: { type: 'ARRAY', items: { type: 'STRING' } } },
+              required: ['ingredients'],
+            },
+          },
+        }),
+      }
+    );
+    if (!r.ok) throw new Error('vision ' + r.status);
+    const data = await r.json();
+    return JSON.parse(data.candidates[0].content.parts[0].text).ingredients;
+  }
   ```
 
-- Worker responds `{ ingredients: [...] }`; on Claude API error, pass through
-  a 502 with a short message.
+- Worker responds `{ ingredients: [...] }`; on upstream error, pass through a
+  502 with a short message (429 from Gemini → 429 to the app: "daily scan
+  quota reached").
 
 **App side (Cook tab):**
 - 📷 "Scan my kitchen" button next to the pantry chip input. Hidden when
@@ -516,11 +534,11 @@ allowlists origins:
   duplicates against existing pantry entries.
 - Spinner + "reading your kitchen…" state; errors surface as a toast.
 
-**Cost note for the owner:** ~1 photo ≈ 1,500–2,500 input tokens + ~100
-output ≈ $0.01–0.02 (₹1–2) per scan at Opus 4.8 rates. Owner setup: create an
-Anthropic API key (console.anthropic.com) and `wrangler secret put
-ANTHROPIC_API_KEY`. If the key/secret is absent the Worker returns 501 and
-the app hides the scan button after the first 501.
+**Cost note for the owner:** ₹0 — Gemini Flash's free tier covers personal
+scan volumes comfortably (the KV rate limit keeps usage inside the daily
+quota). Owner setup is one step: create a free API key at Google AI Studio
+and `wrangler secret put GEMINI_API_KEY`. If the secret is absent the Worker
+returns 501 and the app hides the scan button after the first 501.
 
 ### 13.2 Shopping list (checklist, native to Aduppu — not a Nisaba task)
 
