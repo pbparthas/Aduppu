@@ -197,7 +197,7 @@ export const SEEDS = {
     breakfast: [
       V('Puttu with Kadala Curry', ['rice flour', 'coconut', 'black chickpea', 'onion', 'coconut oil'], ['comfort']),
       V('Appam with Vegetable Stew', ['rice', 'coconut milk', 'yeast', 'potato', 'carrot', 'green pea', 'cardamom'], ['comfort']),
-      V('Kerala Parotta', ['wheat flour', 'egg', 'oil', 'sugar', 'salt'], ['roti']),
+      E('Kerala Parotta', ['wheat flour', 'egg', 'oil', 'sugar', 'salt'], ['roti']),
       E('Idiyappam with Egg Curry', ['rice flour', 'egg', 'onion', 'tomato', 'coconut milk', 'curry leaves'], ['comfort']),
       V('Dosa with Sambar', ['rice', 'urad dal', 'toor dal', 'drumstick', 'tamarind', 'sambar powder', 'coconut oil']),
       V('Vellayappam', ['rice', 'coconut', 'sugar', 'yeast', 'coconut oil']),
@@ -495,7 +495,7 @@ export const SEEDS = {
       V('Sanna with Goan Veg Curry', ['rice', 'coconut', 'toddy', 'coconut milk', 'mixed vegetable']),
       N('Goan Prawn Pulao', ['rice', 'prawn', 'onion', 'tomato', 'coconut milk', 'coriander'], ['rice']),
       E('Goan Egg Curry', ['egg', 'coconut', 'tamarind', 'red chilli', 'onion', 'turmeric'], ['curry']),
-      V('Bebinca', ['coconut milk', 'sugar', 'egg yolk', 'maida', 'ghee', 'cardamom', 'nutmeg'], ['sweet']),
+      E('Bebinca', ['coconut milk', 'sugar', 'egg yolk', 'maida', 'ghee', 'cardamom', 'nutmeg'], ['sweet']),
     ],
   },
 

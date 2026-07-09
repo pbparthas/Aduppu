@@ -6,23 +6,30 @@ import { pickDish } from '../lib/randomizer.js';
 
 // ── FSSAI diet dot (inline SVG) ──────────────────────────────────────────────
 // Green circle = veg, yellow circle = egg, brown triangle = non-veg.
+// Renders via .diet-dot CSS classes which set color via currentColor.
 
-function DietDot({ diet, size = 14 }) {
+function DietDot({ diet, size }) {
+  const cls = diet === 'nonveg' ? 'nonveg' : diet === 'egg' ? 'egg' : 'veg';
+  const label = diet === 'nonveg' ? 'Non-vegetarian' : diet === 'egg' ? 'Egg' : 'Vegetarian';
+  const sizeStyle = size ? { width: size, height: size } : undefined;
+
   if (diet === 'nonveg') {
     return (
-      <svg width={size} height={size} viewBox="0 0 14 14" className="diet-dot" aria-label="Non-vegetarian" style={{ flexShrink: 0 }}>
-        <rect x="0.5" y="0.5" width="13" height="13" fill="none" stroke="#8B4513" strokeWidth="1" />
-        <polygon points="7,3 11,11 3,11" fill="#8B4513" />
-      </svg>
+      <span className={`diet-dot ${cls}`} aria-label={label} style={sizeStyle}>
+        <svg viewBox="0 0 14 14">
+          <rect x="0.5" y="0.5" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1" />
+          <polygon points="7,3 11,11 3,11" fill="currentColor" />
+        </svg>
+      </span>
     );
   }
-  const color = diet === 'egg' ? '#C8A951' : '#008000';
-  const label = diet === 'egg' ? 'Egg' : 'Vegetarian';
   return (
-    <svg width={size} height={size} viewBox="0 0 14 14" className="diet-dot" aria-label={label} style={{ flexShrink: 0 }}>
-      <rect x="0.5" y="0.5" width="13" height="13" fill="none" stroke={color} strokeWidth="1" />
-      <circle cx="7" cy="7" r="3.5" fill={color} />
-    </svg>
+    <span className={`diet-dot ${cls}`} aria-label={label} style={sizeStyle}>
+      <svg viewBox="0 0 14 14">
+        <rect x="0.5" y="0.5" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1" />
+        <circle cx="7" cy="7" r="3.5" fill="currentColor" />
+      </svg>
+    </span>
   );
 }
 
@@ -47,6 +54,20 @@ function regionKeyFor(key) {
   if (key.includes(':')) return key.split(':')[0];
   return null;
 }
+
+// ── Minimal editor input style (no dedicated CSS class exists) ───────────────
+
+const EDITOR_INPUT = {
+  width: '100%',
+  padding: '6px 8px',
+  border: '1px solid var(--line)',
+  borderRadius: '6px',
+  fontSize: '13px',
+  fontFamily: 'inherit',
+  boxSizing: 'border-box',
+  background: 'var(--card)',
+  color: 'var(--ink)',
+};
 
 // ═════════════════════════════════════════════════════════════════════════════
 // Cook component
@@ -273,32 +294,30 @@ export default function Cook({
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="tab-content cook-tab">
+    <div className="screen">
 
       {/* ── Search bar ── */}
-      <div style={{ padding: '12px 16px 8px' }}>
+      <div className="search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <circle cx="11" cy="11" r="7" /><path d="m21 21-4.35-4.35" />
+        </svg>
         <input
           type="text"
-          className="search-input"
           placeholder="Search dishes, ingredients, cuisines..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          style={{
-            width: '100%', padding: '8px 14px', borderRadius: '20px',
-            border: '1px solid var(--border, #ddd)', fontSize: '0.875rem',
-            fontFamily: 'Inter, sans-serif', outline: 'none',
-            background: 'var(--card-bg, #fff)', color: 'var(--ink, #222)',
-            boxSizing: 'border-box',
-          }}
         />
+        {query && (
+          <button className="search-x" onClick={() => setQuery('')}>&#x2715;</button>
+        )}
       </div>
 
       {/* ── Mode toggle ── */}
-      <div className="seg-group" style={{ display: 'flex', gap: '4px', padding: '0 16px 8px' }}>
+      <div className="seg" style={{ marginTop: 10 }}>
         {[{ key: 'all', label: 'All dishes' }, { key: 'kitchen', label: 'From my kitchen' }].map(({ key, label }) => (
           <button
             key={key}
-            className={`seg${mode === key ? ' active' : ''}`}
+            className={mode === key ? 'on' : undefined}
             onClick={() => { setMode(key); setCuisineFilter(null); }}
           >
             {label}
@@ -310,20 +329,20 @@ export default function Cook({
       {/* ALL DISHES MODE                                                    */}
       {/* ════════════════════════════════════════════════════════════════════ */}
       {mode === 'all' && (
-        <div className="all-dishes-mode">
+        <>
           {/* Meal filter */}
-          <div className="chip-row" style={{ display: 'flex', gap: '6px', padding: '0 16px 6px', flexWrap: 'wrap' }}>
+          <div className="seg wrap" style={{ marginTop: 10 }}>
             {['all', 'breakfast', 'lunch', 'dinner'].map((m) => (
-              <button key={m} className={`chip${mealFilter === m ? ' active' : ''}`} onClick={() => setMealFilter(m)}>
+              <button key={m} className={mealFilter === m ? 'on' : undefined} onClick={() => setMealFilter(m)}>
                 {m === 'all' ? 'All' : cap(m)}
               </button>
             ))}
           </div>
 
           {/* Cuisine filter */}
-          <div className="chip-row" style={{ display: 'flex', gap: '6px', padding: '0 16px 6px', flexWrap: 'wrap' }}>
+          <div className="group-toggle">
             <button
-              className={`chip${cuisineFilter === null ? ' active' : ''}`}
+              className={cuisineFilter === null ? 'on' : undefined}
               onClick={() => setCuisineFilter(null)}
             >
               All
@@ -331,7 +350,7 @@ export default function Cook({
             {cuisinesWithDishes.map((region) => (
               <React.Fragment key={region.key}>
                 <button
-                  className={`chip${activeRegionKey === region.key ? ' active' : ''}`}
+                  className={activeRegionKey === region.key ? 'on' : undefined}
                   onClick={() => setCuisineFilter(cuisineFilter === region.key ? null : region.key)}
                 >
                   {region.label}
@@ -340,9 +359,9 @@ export default function Cook({
                 {activeRegionKey === region.key && (subsWithDishes[region.key] || []).map((sub) => (
                   <button
                     key={sub.key}
-                    className={`chip sub${cuisineFilter === sub.key ? ' active' : ''}`}
+                    className={cuisineFilter === sub.key ? 'on' : undefined}
                     onClick={() => setCuisineFilter(cuisineFilter === sub.key ? region.key : sub.key)}
-                    style={{ marginLeft: '16px', fontSize: '0.75rem' }}
+                    style={{ marginLeft: 12 }}
                   >
                     {sub.label}
                   </button>
@@ -353,9 +372,9 @@ export default function Cook({
 
           {/* Diet toggle */}
           {userDiet !== 'all' && (
-            <div style={{ padding: '0 16px 8px' }}>
+            <div className="group-toggle">
               <button
-                className={`chip${showAllDiet ? ' active' : ''}`}
+                className={showAllDiet ? 'on' : undefined}
                 onClick={() => setShowAllDiet(!showAllDiet)}
               >
                 {dietToggleLabel}
@@ -364,55 +383,40 @@ export default function Cook({
           )}
 
           {/* ── Inline add composer ── */}
-          <div style={{ padding: '0 16px 8px' }}>
-            {addingDish ? (
-              <div className="card" style={{ padding: '12px' }}>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <input
-                    type="text"
-                    placeholder="Dish name"
-                    value={addName}
-                    onChange={(e) => setAddName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleAddDish();
-                      if (e.key === 'Escape') setAddingDish(false);
-                    }}
-                    autoFocus
-                    style={{
-                      flex: 1, padding: '6px 10px', border: '1px solid var(--border, #ddd)',
-                      borderRadius: '6px', fontSize: '0.875rem', fontFamily: 'Inter, sans-serif',
-                      background: 'var(--card-bg, #fff)', color: 'var(--ink, #222)',
-                    }}
-                  />
-                  <select
-                    value={addMeal}
-                    onChange={(e) => setAddMeal(e.target.value)}
-                    style={{
-                      padding: '6px 8px', border: '1px solid var(--border, #ddd)',
-                      borderRadius: '6px', fontSize: '0.8rem', fontFamily: 'Inter, sans-serif',
-                      background: 'var(--card-bg, #fff)', color: 'var(--ink, #222)',
-                    }}
-                  >
-                    <option value="breakfast">Breakfast</option>
-                    <option value="lunch">Lunch</option>
-                    <option value="dinner">Dinner</option>
-                  </select>
-                </div>
-                <div style={{ display: 'flex', gap: '8px', marginTop: '8px', justifyContent: 'flex-end' }}>
-                  <button className="btn" onClick={() => setAddingDish(false)} style={{ opacity: 0.6 }}>Cancel</button>
-                  <button className="btn" onClick={handleAddDish}>Add</button>
-                </div>
+          {addingDish ? (
+            <div className="card" style={{ marginTop: 10 }}>
+              <div className="add-composer">
+                <div className="dot" />
+                <input
+                  type="text"
+                  placeholder="Dish name"
+                  value={addName}
+                  onChange={(e) => setAddName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleAddDish();
+                    if (e.key === 'Escape') setAddingDish(false);
+                  }}
+                  autoFocus
+                />
               </div>
-            ) : (
-              <button
-                className="btn"
-                onClick={() => setAddingDish(true)}
-                style={{ width: '100%', textAlign: 'center' }}
-              >
-                + Add dish
-              </button>
-            )}
-          </div>
+              <div className="seg" style={{ marginTop: 8 }}>
+                {['breakfast', 'lunch', 'dinner'].map((m) => (
+                  <button key={m} className={addMeal === m ? 'on' : undefined} onClick={() => setAddMeal(m)}>
+                    {cap(m)}
+                  </button>
+                ))}
+              </div>
+              <div className="btn-row">
+                <button className="btn ghost" onClick={() => setAddingDish(false)}>Cancel</button>
+                <button className="btn accent" onClick={handleAddDish}>Add</button>
+              </div>
+            </div>
+          ) : (
+            <button className="add-task" onClick={() => setAddingDish(true)}>
+              <span className="plus">+</span>
+              Add dish
+            </button>
+          )}
 
           {/* ── Dish cards grouped by meal ── */}
           {['breakfast', 'lunch', 'dinner'].map((meal) => {
@@ -421,90 +425,79 @@ export default function Cook({
             if (!cards || cards.length === 0) return null;
 
             return (
-              <div key={meal} style={{ padding: '0 16px 12px' }}>
-                <div className="eyebrow">{cap(meal)}</div>
-                {cards.map((dish) => (
-                  <DishCard
-                    key={dish.id}
-                    dish={dish}
-                    expanded={expandedId === dish.id}
-                    onToggle={() => setExpandedId(expandedId === dish.id ? null : dish.id)}
-                    menuOpen={menuOpen && expandedId === dish.id}
-                    onMenuToggle={() => setMenuOpen(!menuOpen)}
-                    saveItem={saveItem}
-                    deleteWithUndo={deleteWithUndo}
-                    onFieldUpdate={handleFieldUpdate}
-                  />
-                ))}
+              <div key={meal} className="section">
+                <span className="eyebrow">{cap(meal)}</span>
+                <div className="list">
+                  {cards.map((dish) => (
+                    <DishCard
+                      key={dish.id}
+                      dish={dish}
+                      expanded={expandedId === dish.id}
+                      onToggle={() => setExpandedId(expandedId === dish.id ? null : dish.id)}
+                      menuOpen={menuOpen && expandedId === dish.id}
+                      onMenuToggle={() => setMenuOpen(!menuOpen)}
+                      saveItem={saveItem}
+                      deleteWithUndo={deleteWithUndo}
+                      onFieldUpdate={handleFieldUpdate}
+                    />
+                  ))}
+                </div>
               </div>
             );
           })}
 
           {allDishesFiltered.length === 0 && (
-            <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--muted, #888)' }}>
-              No dishes found.
-            </div>
+            <p className="empty">No dishes found.</p>
           )}
-        </div>
+        </>
       )}
 
       {/* ════════════════════════════════════════════════════════════════════ */}
       {/* FROM MY KITCHEN MODE                                               */}
       {/* ════════════════════════════════════════════════════════════════════ */}
       {mode === 'kitchen' && (
-        <div className="kitchen-mode">
+        <>
           {/* Pantry chip input */}
-          <div style={{ padding: '0 16px 8px' }}>
-            <div className="eyebrow">Your pantry</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
+          <div className="section">
+            <span className="eyebrow">Your pantry</span>
+            <div className="pantry-input" style={{ marginTop: 8 }}>
               {pantryItems.map((item, idx) => (
-                <span key={`${item}-${idx}`} className="chip" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <span key={`${item}-${idx}`} className="ing-pill">
                   {item}
                   <button
+                    className="x"
                     onClick={() => handlePantryRemove(item)}
-                    style={{
-                      background: 'none', border: 'none', cursor: 'pointer',
-                      fontSize: '0.7rem', padding: '0 2px', color: 'var(--muted, #888)', lineHeight: 1,
-                    }}
                     aria-label={`Remove ${item}`}
                   >
-                    ✕
+                    &#x2715;
                   </button>
                 </span>
               ))}
+              <input
+                type="text"
+                placeholder="Add ingredient..."
+                value={pantryInput}
+                onChange={(e) => setPantryInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') { handlePantryAdd(pantryInput); setPantryInput(''); }
+                }}
+              />
             </div>
-            <input
-              type="text"
-              placeholder="Add ingredient and press Enter..."
-              value={pantryInput}
-              onChange={(e) => setPantryInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') { handlePantryAdd(pantryInput); setPantryInput(''); }
-              }}
-              style={{
-                width: '100%', padding: '8px 12px', border: '1px solid var(--border, #ddd)',
-                borderRadius: '6px', fontSize: '0.875rem', fontFamily: 'Inter, sans-serif',
-                background: 'var(--card-bg, #fff)', color: 'var(--ink, #222)',
-                boxSizing: 'border-box',
-              }}
-            />
           </div>
 
           {/* Staples toggle */}
-          <div style={{ padding: '0 16px 8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.875rem', cursor: 'pointer' }}>
+          <div className="row" style={{ marginTop: 8 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, cursor: 'pointer' }}>
               <input type="checkbox" checked={staplesOn} onChange={() => setStaplesOn(!staplesOn)} />
               I have the basics
             </label>
-            <span style={{ fontSize: '0.75rem', color: 'var(--muted, #888)' }}>
-              ({STAPLES.slice(0, 4).join(', ')}, ...)
-            </span>
+            <span className="lead">({STAPLES.slice(0, 4).join(', ')}, ...)</span>
           </div>
 
           {/* Cuisine chips for kitchen mode */}
-          <div className="chip-row" style={{ display: 'flex', gap: '6px', padding: '0 16px 8px', flexWrap: 'wrap' }}>
+          <div className="group-toggle">
             <button
-              className={`chip${cuisineFilter === null ? ' active' : ''}`}
+              className={cuisineFilter === null ? 'on' : undefined}
               onClick={() => setCuisineFilter(null)}
             >
               {favCuisines.length > 0 ? 'Favourites' : 'All'}
@@ -512,7 +505,7 @@ export default function Cook({
             {cuisinesWithDishes.map((region) => (
               <button
                 key={region.key}
-                className={`chip${cuisineFilter === region.key ? ' active' : ''}`}
+                className={cuisineFilter === region.key ? 'on' : undefined}
                 onClick={() => setCuisineFilter(cuisineFilter === region.key ? null : region.key)}
               >
                 {region.label}
@@ -522,98 +515,89 @@ export default function Cook({
 
           {/* ── Results: Can cook now ── */}
           {kitchenResults.full.length > 0 && (
-            <div style={{ padding: '0 16px 12px' }}>
-              <div className="eyebrow" style={{ color: '#2e7d32' }}>Can cook now</div>
-              {kitchenResults.full.map(({ dish, match }) => (
-                <KitchenCard
-                  key={dish.id}
-                  dish={dish}
-                  match={match}
-                  variant="full"
-                  onPlan={() => {
-                    setShowPlanPicker({ dishName: dish.name, meal: dish.meal });
-                    setPlanDay(localDateStr());
-                    setPlanMeal(dish.meal || 'lunch');
-                  }}
-                  onLog={() => handleLogDish(dish.name, dish.meal)}
-                />
-              ))}
+            <div className="section">
+              <span className="eyebrow" style={{ color: 'var(--success)' }}>Can cook now</span>
+              <div className="list">
+                {kitchenResults.full.map(({ dish, match }) => (
+                  <KitchenCard
+                    key={dish.id}
+                    dish={dish}
+                    match={match}
+                    variant="full"
+                    onPlan={() => {
+                      setShowPlanPicker({ dishName: dish.name, meal: dish.meal });
+                      setPlanDay(localDateStr());
+                      setPlanMeal(dish.meal || 'lunch');
+                    }}
+                    onLog={() => handleLogDish(dish.name, dish.meal)}
+                  />
+                ))}
+              </div>
             </div>
           )}
 
           {/* ── Results: Almost there ── */}
           {kitchenResults.partial.length > 0 && (
-            <div style={{ padding: '0 16px 12px' }}>
-              <div className="eyebrow">Almost there</div>
-              {kitchenResults.partial.map(({ dish, match }) => (
-                <KitchenCard
-                  key={dish.id}
-                  dish={dish}
-                  match={match}
-                  variant="partial"
-                  onPlan={() => {
-                    setShowPlanPicker({ dishName: dish.name, meal: dish.meal });
-                    setPlanDay(localDateStr());
-                    setPlanMeal(dish.meal || 'lunch');
-                  }}
-                  onLog={() => handleLogDish(dish.name, dish.meal)}
-                />
-              ))}
+            <div className="section">
+              <span className="eyebrow">Almost there</span>
+              <div className="list">
+                {kitchenResults.partial.map(({ dish, match }) => (
+                  <KitchenCard
+                    key={dish.id}
+                    dish={dish}
+                    match={match}
+                    variant="partial"
+                    onPlan={() => {
+                      setShowPlanPicker({ dishName: dish.name, meal: dish.meal });
+                      setPlanDay(localDateStr());
+                      setPlanMeal(dish.meal || 'lunch');
+                    }}
+                    onLog={() => handleLogDish(dish.name, dish.meal)}
+                  />
+                ))}
+              </div>
             </div>
           )}
 
           {/* Empty states */}
           {kitchenResults.full.length === 0 && kitchenResults.partial.length === 0 && pantryItems.length > 0 && (
-            <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--muted, #888)' }}>
-              No matching dishes found. Try adding more ingredients.
-            </div>
+            <p className="empty">No matching dishes found. Try adding more ingredients.</p>
           )}
           {pantryItems.length === 0 && (
-            <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--muted, #888)' }}>
-              Add ingredients above to see what you can cook.
-            </div>
+            <p className="empty">Add ingredients above to see what you can cook.</p>
           )}
-        </div>
+        </>
       )}
 
       {/* ── Plan picker sheet (overlay) ── */}
       {showPlanPicker && (
         <div className="overlay" onClick={() => setShowPlanPicker(null)}>
-          <div className="panel" onClick={(e) => e.stopPropagation()} style={{ padding: '16px' }}>
-            <h3 style={{ margin: '0 0 12px', fontSize: '1rem', fontWeight: 600, fontFamily: 'Inter, sans-serif' }}>
+          <div className="panel" onClick={(e) => e.stopPropagation()}>
+            <span className="editor-title-read">
               Plan &ldquo;{showPlanPicker.dishName}&rdquo;
-            </h3>
+            </span>
 
-            <div className="eyebrow">Day</div>
-            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '12px' }}>
+            <span className="eyebrow">Day</span>
+            <div className="seg wrap">
               {Array.from({ length: 7 }, (_, i) => addDays(localDateStr(), i)).map((d) => (
-                <button
-                  key={d}
-                  className={`chip${planDay === d ? ' active' : ''}`}
-                  onClick={() => setPlanDay(d)}
-                >
+                <button key={d} className={planDay === d ? 'on' : undefined} onClick={() => setPlanDay(d)}>
                   {dayLabel(d)}
                 </button>
               ))}
             </div>
 
-            <div className="eyebrow">Meal</div>
-            <div style={{ display: 'flex', gap: '6px', marginBottom: '16px' }}>
+            <span className="eyebrow">Meal</span>
+            <div className="seg">
               {['breakfast', 'lunch', 'dinner'].map((m) => (
-                <button
-                  key={m}
-                  className={`chip${planMeal === m ? ' active' : ''}`}
-                  onClick={() => setPlanMeal(m)}
-                >
+                <button key={m} className={planMeal === m ? 'on' : undefined} onClick={() => setPlanMeal(m)}>
                   {cap(m)}
                 </button>
               ))}
             </div>
 
             <button
-              className="btn"
+              className="btn accent wide"
               onClick={() => handlePlanDish(showPlanPicker.dishName, planDay, planMeal)}
-              style={{ width: '100%' }}
             >
               Add to plan
             </button>
@@ -626,53 +610,46 @@ export default function Cook({
 
 // ═════════════════════════════════════════════════════════════════════════════
 // DishCard — expandable catalog card (All dishes mode)
+// Uses .card + .task pattern for expand-in-place behavior.
 // ═════════════════════════════════════════════════════════════════════════════
-
-const INPUT_STYLE = {
-  width: '100%', padding: '6px 8px', border: '1px solid var(--border, #ddd)',
-  borderRadius: '6px', fontSize: '0.8rem', fontFamily: 'Inter, sans-serif',
-  boxSizing: 'border-box', background: 'var(--card-bg, #fff)', color: 'var(--ink, #222)',
-};
 
 function DishCard({ dish, expanded, onToggle, menuOpen, onMenuToggle, saveItem, deleteWithUndo, onFieldUpdate }) {
   const preview = (dish.ingredients || []).slice(0, 4);
   const moreCount = Math.max(0, (dish.ingredients || []).length - 4);
 
   return (
-    <div className={`card${expanded ? ' expanded' : ''}`} style={{ marginBottom: '8px', padding: '12px' }}>
+    <div className={`card task${expanded ? ' open' : ''}`}>
       {/* ── Summary row ── */}
-      <div onClick={onToggle} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', cursor: 'pointer' }}>
+      <div className="task-row" onClick={onToggle}>
         <DietDot diet={dish.diet || 'veg'} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 600, fontSize: '0.9375rem' }}>{dish.name}</div>
-          {dish.cuisine && (
-            <span className="chip" style={{ fontSize: '0.7rem', marginTop: '4px', display: 'inline-block' }}>
-              {cuisineLabel(dish.cuisine)}
-            </span>
-          )}
-          {preview.length > 0 && (
-            <div style={{ fontSize: '0.8rem', color: 'var(--muted, #666)', marginTop: '4px' }}>
-              {preview.join(', ')}{moreCount > 0 ? `, +${moreCount} more` : ''}
-            </div>
-          )}
+        <div className="task-main">
+          <div className="task-title">{dish.name}</div>
+          <div className="task-sub">
+            {dish.cuisine && (
+              <span className="chip cuisine">{cuisineLabel(dish.cuisine)}</span>
+            )}
+            {preview.length > 0 && (
+              <span className="lead">
+                {preview.join(', ')}{moreCount > 0 ? `, +${moreCount} more` : ''}
+              </span>
+            )}
+          </div>
           {(dish.tags || []).length > 0 && (
-            <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '4px' }}>
+            <div className="task-sub">
               {dish.tags.map((tag) => (
-                <span key={tag} className="chip" style={{ fontSize: '0.7rem' }}>#{tag}</span>
+                <span key={tag} className="chip plain">#{tag}</span>
               ))}
             </div>
           )}
         </div>
+        <span className="chev">&#x203A;</span>
       </div>
 
       {/* ── Expanded editor ── */}
       {expanded && (
-        <div
-          style={{ marginTop: '12px', borderTop: '1px solid var(--border, #eee)', paddingTop: '12px' }}
-          onClick={(e) => e.stopPropagation()}
-        >
+        <div className="task-detail" onClick={(e) => e.stopPropagation()}>
           {/* Ingredients */}
-          <label className="eyebrow" style={{ fontSize: '0.7rem' }}>Ingredients</label>
+          <span className="eyebrow">Ingredients</span>
           <textarea
             key={`ing-${dish.id}-${dish.updated_at}`}
             defaultValue={(dish.ingredients || []).join(', ')}
@@ -684,11 +661,11 @@ function DishCard({ dish, expanded, onToggle, menuOpen, onMenuToggle, saveItem, 
             }}
             placeholder="rice, toor dal, tomato..."
             rows={2}
-            style={{ ...INPUT_STYLE, resize: 'vertical' }}
+            style={{ ...EDITOR_INPUT, resize: 'vertical' }}
           />
 
           {/* Reference */}
-          <label className="eyebrow" style={{ fontSize: '0.7rem', marginTop: '8px', display: 'block' }}>Reference</label>
+          <span className="eyebrow" style={{ marginTop: 8 }}>Reference</span>
           <input
             type="text"
             key={`ref-${dish.id}-${dish.updated_at}`}
@@ -697,11 +674,11 @@ function DishCard({ dish, expanded, onToggle, menuOpen, onMenuToggle, saveItem, 
               if (e.target.value !== (dish.ref || '')) onFieldUpdate(dish, 'ref', e.target.value);
             }}
             placeholder="Book, URL, or person"
-            style={INPUT_STYLE}
+            style={EDITOR_INPUT}
           />
 
           {/* Notes */}
-          <label className="eyebrow" style={{ fontSize: '0.7rem', marginTop: '8px', display: 'block' }}>Notes</label>
+          <span className="eyebrow" style={{ marginTop: 8 }}>Notes</span>
           <textarea
             key={`note-${dish.id}-${dish.updated_at}`}
             defaultValue={dish.notes || ''}
@@ -710,16 +687,16 @@ function DishCard({ dish, expanded, onToggle, menuOpen, onMenuToggle, saveItem, 
             }}
             placeholder="Prep notes..."
             rows={2}
-            style={{ ...INPUT_STYLE, resize: 'vertical' }}
+            style={{ ...EDITOR_INPUT, resize: 'vertical' }}
           />
 
           {/* Meal selector */}
-          <label className="eyebrow" style={{ fontSize: '0.7rem', marginTop: '8px', display: 'block' }}>Meal</label>
-          <div style={{ display: 'flex', gap: '6px' }}>
+          <span className="eyebrow" style={{ marginTop: 8 }}>Meal</span>
+          <div className="seg">
             {['breakfast', 'lunch', 'dinner'].map((m) => (
               <button
                 key={m}
-                className={`chip${dish.meal === m ? ' active' : ''}`}
+                className={dish.meal === m ? 'on' : undefined}
                 onClick={() => onFieldUpdate(dish, 'meal', m)}
               >
                 {cap(m)}
@@ -728,15 +705,11 @@ function DishCard({ dish, expanded, onToggle, menuOpen, onMenuToggle, saveItem, 
           </div>
 
           {/* Cuisine selector */}
-          <label className="eyebrow" style={{ fontSize: '0.7rem', marginTop: '8px', display: 'block' }}>Cuisine</label>
+          <span className="eyebrow" style={{ marginTop: 8 }}>Cuisine</span>
           <select
             value={dish.cuisine || ''}
             onChange={(e) => onFieldUpdate(dish, 'cuisine', e.target.value)}
-            style={{
-              padding: '6px 8px', border: '1px solid var(--border, #ddd)',
-              borderRadius: '6px', fontSize: '0.8rem', fontFamily: 'Inter, sans-serif',
-              background: 'var(--card-bg, #fff)', color: 'var(--ink, #222)',
-            }}
+            style={EDITOR_INPUT}
           >
             <option value="">Select...</option>
             {CUISINES.map((c) => (
@@ -750,14 +723,14 @@ function DishCard({ dish, expanded, onToggle, menuOpen, onMenuToggle, saveItem, 
           </select>
 
           {/* Diet selector */}
-          <label className="eyebrow" style={{ fontSize: '0.7rem', marginTop: '8px', display: 'block' }}>Diet</label>
-          <div style={{ display: 'flex', gap: '6px' }}>
+          <span className="eyebrow" style={{ marginTop: 8 }}>Diet</span>
+          <div className="seg">
             {[{ key: 'veg', label: 'Veg' }, { key: 'egg', label: 'Egg' }, { key: 'nonveg', label: 'Non-veg' }].map(({ key, label }) => (
               <button
                 key={key}
-                className={`chip${dish.diet === key ? ' active' : ''}`}
+                className={dish.diet === key ? 'on' : undefined}
                 onClick={() => onFieldUpdate(dish, 'diet', key)}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
               >
                 <DietDot diet={key} size={12} /> {label}
               </button>
@@ -765,7 +738,7 @@ function DishCard({ dish, expanded, onToggle, menuOpen, onMenuToggle, saveItem, 
           </div>
 
           {/* Tags */}
-          <label className="eyebrow" style={{ fontSize: '0.7rem', marginTop: '8px', display: 'block' }}>Tags</label>
+          <span className="eyebrow" style={{ marginTop: 8 }}>Tags</span>
           <input
             type="text"
             key={`tags-${dish.id}-${dish.updated_at}`}
@@ -777,35 +750,19 @@ function DishCard({ dish, expanded, onToggle, menuOpen, onMenuToggle, saveItem, 
               }
             }}
             placeholder="spicy, one-pot, quick..."
-            style={INPUT_STYLE}
+            style={EDITOR_INPUT}
           />
 
           {/* Overflow menu */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px', position: 'relative' }}>
-            <button
-              onClick={onMenuToggle}
-              style={{
-                background: 'none', border: 'none', cursor: 'pointer',
-                fontSize: '1.25rem', padding: '4px 8px', color: 'var(--muted, #666)',
-              }}
-              aria-label="More options"
-            >
+          <div className="detail-foot">
+            <button className="overflow" onClick={onMenuToggle} aria-label="More options">
               &#x22EF;
             </button>
             {menuOpen && (
-              <div style={{
-                position: 'absolute', bottom: '100%', right: 0,
-                background: 'var(--card-bg, #fff)', border: '1px solid var(--border, #ddd)',
-                borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
-                zIndex: 10, minWidth: '120px',
-              }}>
+              <div className="menu">
                 <button
+                  className="danger"
                   onClick={() => { deleteWithUndo(dish); onMenuToggle(); }}
-                  style={{
-                    display: 'block', width: '100%', padding: '10px 16px',
-                    background: 'none', border: 'none', textAlign: 'left',
-                    cursor: 'pointer', fontSize: '0.875rem', color: '#c62828',
-                  }}
                 >
                   Delete
                 </button>
@@ -826,34 +783,27 @@ function KitchenCard({ dish, match, variant, onPlan, onLog }) {
   return (
     <div
       className="card"
-      style={{
-        marginBottom: '8px', padding: '12px',
-        ...(variant === 'full' ? { borderLeft: '3px solid #4caf50' } : {}),
-      }}
+      style={variant === 'full' ? { borderLeft: '3px solid var(--success)' } : undefined}
     >
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+      <div className="task-row">
         <DietDot diet={dish.diet || 'veg'} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 600, fontSize: '0.9375rem' }}>{dish.name}</div>
-          {dish.cuisine && (
-            <span className="chip" style={{ fontSize: '0.7rem', marginTop: '2px', display: 'inline-block' }}>
-              {cuisineLabel(dish.cuisine)}
-            </span>
-          )}
+        <div className="task-main">
+          <div className="task-title">{dish.name}</div>
+          <div className="task-sub">
+            {dish.cuisine && (
+              <span className="chip cuisine">{cuisineLabel(dish.cuisine)}</span>
+            )}
+          </div>
           {variant === 'partial' && match.missing.length > 0 && (
-            <div style={{ fontSize: '0.8rem', color: '#b71c1c', marginTop: '4px' }}>
+            <span className="lead" style={{ color: 'var(--overdue)' }}>
               Need: {match.missing.join(', ')}
-            </div>
+            </span>
           )}
         </div>
       </div>
-      <div style={{ display: 'flex', gap: '8px', marginTop: '8px', justifyContent: 'flex-end' }}>
-        <button className="btn" onClick={onPlan} style={{ fontSize: '0.8rem' }}>
-          Plan it &rarr;
-        </button>
-        <button className="btn" onClick={onLog} style={{ fontSize: '0.8rem' }}>
-          Log it
-        </button>
+      <div className="btn-row" style={{ justifyContent: 'flex-end' }}>
+        <button className="btn small" onClick={onPlan}>Plan it &rarr;</button>
+        <button className="btn small" onClick={onLog}>Log it</button>
       </div>
     </div>
   );
