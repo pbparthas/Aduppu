@@ -437,5 +437,114 @@ Same skeleton as Nisaba's `App.jsx`:
 - Trash/restore screen (tombstones + 30-day GC run underneath; Undo toast
   covers the immediate-mistake case).
 - Desktop (Tauri) shell, local REST/MCP service, multi-user/family sharing.
-- Grid week view for wide screens; nutrition data; shopping-list generation
-  from the week's plan (good v3.1 candidate).
+- Grid week view for wide screens; nutrition data.
+- Cross-app bridge to Nisaba (e.g. "send shopping list as a Nisaba task").
+  Deliberately not built: the apps use separate OAuth clients, so with
+  `drive.file` scope neither can see the other's Drive files — bridging would
+  require sharing one OAuth client (reversing the isolation decision in §3)
+  and coupling Aduppu to Nisaba's item schema. The shopping list is native to
+  Aduppu instead (§13.2). Revisit only if the owner asks again after using it.
+
+## 13. Phase 2 — owner-requested features (build AFTER core v3 ships and is verified)
+
+Do not start these until §11 verification passes and the owner has the core
+app deployed. Both are specced here so no re-design is needed.
+
+### 13.1 Photo-to-pantry ("scan my kitchen")
+
+Take a photo of ingredients/shelf/fridge; a vision model extracts an
+ingredient list that prefills the pantry chips in Cook → "From my kitchen".
+
+**Architecture:** the browser never holds an AI API key. Add one endpoint to
+the existing auth Worker (`aduppu/worker`), which already holds secrets and
+allowlists origins:
+
+- `POST /vision` — body `{ image: <base64 jpeg>, media_type: 'image/jpeg' }`.
+  Auth: require a valid `ad_session` cookie (same KV lookup as `/refresh`) AND
+  the CORS origin allowlist — the endpoint spends money, so anonymous calls
+  must 401. Rate-limit via KV counter (e.g. key `vision:<date>`, max 30/day,
+  429 beyond).
+- Worker calls the Claude API with the official TypeScript SDK
+  (`@anthropic-ai/sdk` — fetch-based, runs on Cloudflare Workers). API key via
+  `wrangler secret put ANTHROPIC_API_KEY`. Model: **`claude-opus-4-8`**.
+  Use structured outputs so the reply is guaranteed-parseable JSON:
+
+  ```js
+  const msg = await anthropic.messages.create({
+    model: 'claude-opus-4-8',
+    max_tokens: 1024,
+    output_config: { format: { type: 'json_schema', schema: {
+      type: 'object',
+      properties: { ingredients: { type: 'array', items: { type: 'string' } } },
+      required: ['ingredients'], additionalProperties: false,
+    } } },
+    messages: [{ role: 'user', content: [
+      { type: 'image', source: { type: 'base64', media_type, data: image } },
+      { type: 'text', text:
+        'List every food ingredient you can identify in this photo of a home kitchen. ' +
+        'Use common English grocery names in lowercase singular form (e.g. "tomato", ' +
+        '"toor dal", "curry leaves", "rice flour"). Indian/South Indian household context. ' +
+        'Only include items you can actually see; do not guess at closed containers.' },
+    ] }],
+  });
+  const { ingredients } = JSON.parse(msg.content.find(b => b.type === 'text').text);
+  ```
+
+- Worker responds `{ ingredients: [...] }`; on Claude API error, pass through
+  a 502 with a short message.
+
+**App side (Cook tab):**
+- 📷 "Scan my kitchen" button next to the pantry chip input. Hidden when
+  offline (`navigator.onLine`) or not signed in (no session cookie → 401).
+- `<input type="file" accept="image/*" capture="environment">` → downscale on
+  a canvas to ≤1280px long edge, JPEG quality 0.8 (controls upload size and
+  image-token cost; full-res would cost ~3× for no recognition benefit) →
+  base64 → `fetch(worker + '/vision', { credentials: 'include', ... })`.
+- Results render as **pending chips** (visually distinct, e.g. dashed border)
+  the user confirms or removes before they merge into the pantry item —
+  vision output is good but not infallible; never silently overwrite the
+  pantry. Normalize through `kitchen.js#normalize` before merging; drop
+  duplicates against existing pantry entries.
+- Spinner + "reading your kitchen…" state; errors surface as a toast.
+
+**Cost note for the owner:** ~1 photo ≈ 1,500–2,500 input tokens + ~100
+output ≈ $0.01–0.02 (₹1–2) per scan at Opus 4.8 rates. Owner setup: create an
+Anthropic API key (console.anthropic.com) and `wrangler secret put
+ANTHROPIC_API_KEY`. If the key/secret is absent the Worker returns 501 and
+the app hides the scan button after the first 501.
+
+### 13.2 Shopping list (checklist, native to Aduppu — not a Nisaba task)
+
+Owner decision (2026-07-09): the shopping list lives **in Aduppu**, not as a
+task pushed to Nisaba — see §12 for why the cross-app bridge is out. The
+in-app version also enables a loop Nisaba can't: buying an item updates the
+pantry, which improves "From my kitchen" matching.
+
+**Data:** one synced singleton, same pattern as pantry (single-device LWW):
+
+```js
+{ id: 'shopping', type: 'shopping',
+  items: [ { id, name, note: '', done: false, from: 'plan'|'manual' } ] }
+```
+
+**Generation:** button "Build list from plan" on the shopping sheet:
+1. Collect ingredients of every dish planned for the next 7 days (today
+   inclusive; dish names resolved against the catalog, unknown names skipped).
+2. Subtract pantry entries and STAPLES (normalized matching via `kitchen.js`).
+3. Dedupe against items already on the list (by normalized name).
+4. Present the candidates as pending additions the user confirms (same
+   pending-chip pattern as §13.1) — never auto-add.
+
+**UI:** a bottom-sheet (Nisaba `.overlay`/`.panel` pattern) opened from a
+🛒 button in the Plan tab header, plus a Settings row. Checklist rows use
+Nisaba's `.tick` pattern; inline add-composer for manual items; count badge
+on the 🛒 button while any unchecked items exist.
+
+**The pantry loop:** "Clear bought" removes checked items from the list and
+adds their names to the pantry item (normalized, deduped) in one action, with
+an Undo toast covering the whole batch.
+
+**Reminders:** deliberately none in this phase. A PWA cannot fire reliable
+scheduled notifications without a push server (out of scope; the Worker could
+host Web Push later if the owner asks). The checklist + badge is the v1
+reminder surface.
