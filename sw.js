@@ -1,18 +1,8 @@
-const CACHE = "aduppu-v3";
+const CACHE = "aduppu-v2";
 const ASSETS = [
   "./",
   "./index.html",
   "./manifest.json",
-  "./css/style.css",
-  "./js/data.js",
-  "./js/firebase.js",
-  "./js/app.js",
-  "./js/today.js",
-  "./js/planner.js",
-  "./js/recipes.js",
-  "./js/suggest.js",
-  "./js/track.js",
-  "./js/backup.js",
   "./icons/icon-192.svg",
   "./icons/icon-512.svg"
 ];
