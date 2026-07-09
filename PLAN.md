@@ -26,11 +26,15 @@
 
 ## 1. What Aduppu is
 
-A personal South Indian meal planner: plan the week's breakfast/lunch/dinner,
-log what was actually eaten (home-cooked vs ordered, with ₹ cost), keep a dish
+A personal Indian meal planner: plan the week's breakfast/lunch/dinner, log
+what was actually eaten (home-cooked vs ordered, with ₹ cost), keep a dish
 catalog with ingredients + optional recipe details, suggest what to cook from
-what's in the kitchen, and track home-vs-out stats and grocery spend. Currency ₹,
-dates in local time (IST in practice), en-IN formatting.
+what's in the kitchen, and track home-vs-out stats and grocery spend.
+**Cuisine is a first-class dimension** (owner requirement, 2026-07-09): every
+dish belongs to a regional Indian cuisine (South Indian, Punjabi, Bengali,
+Marathi, …); the user picks favorite cuisines at first run, can change them in
+Settings, and is asked which cuisine to plan for when filling a day/week.
+Currency ₹, dates in local time (IST in practice), en-IN formatting.
 
 **Usage assumption (owner-confirmed):** one user, one primary mobile device per
 login. Drive sync exists for durability (phone loss/wipe, future device
@@ -134,12 +138,19 @@ Types:
 ```js
 // Dish — catalog entry; recipe fields are optional extras on the SAME type.
 { type: 'dish', name: 'Kara Kuzhambu', meal: 'breakfast'|'lunch'|'dinner',
+  cuisine: 'south-indian',                  // key from CUISINES (§4.1); 'other' allowed
   ingredients: ['tamarind','onion', ...],   // normalized lowercase strings
   tags: ['spicy','one-pot'], ref: '',       // source: book / URL / "Paati"
   notes: '' }                               // free-text prep notes
 
+// Prefs — synced singleton (deterministic id), same pattern as pantry.
+{ id: 'prefs', type: 'prefs',
+  cuisines: ['south-indian','punjabi'] }    // favorite cuisines, ≥1; set at onboarding
+
 // Plan — ONE PER CALENDAR DAY, deterministic id so devices converge.
 { id: 'plan-2026-07-09', type: 'plan', date: '2026-07-09',
+  cuisine: null,                            // set when the day was filled for a chosen
+                                            // cuisine; guides per-slot rerolls
   meals: { breakfast: 'Idli', lunch: '', dinner: '' } }  // dish names, '' = unset
 
 // Log — what was actually eaten.
@@ -162,16 +173,50 @@ Decisions:
   file: store as a singleton item `{ id: 'pantry', type: 'pantry',
   items: ['rice','toor dal',...] }` so it syncs like everything else.
 
-### Seeding defaults
+### 4.1 Cuisines (canonical list)
 
-Port v1's `DEFAULTS` dish lists (8 breakfast / 9 lunch / 8 dinner South Indian
-dishes — copy names+ingredients verbatim from `aduppu.html` lines 407–439) into
-`model.js`. On startup, if the store has no dish items AND meta `seeded` unset:
-insert them with **deterministic ids** (`seed-breakfast-1` … `seed-dinner-8`),
-`dirty: 1`, and set meta `seeded = 1`. Deterministic ids mean two devices that
+`model.js` exports the data-driven list — adding a cuisine later is one entry
+plus its seed dishes:
+
+```js
+CUISINES = [
+  { key: 'south-indian', label: 'South Indian' },
+  { key: 'punjabi',      label: 'Punjabi' },
+  { key: 'bengali',      label: 'Bengali' },
+  { key: 'marathi',      label: 'Marathi' },
+  { key: 'gujarati',     label: 'Gujarati' },
+  { key: 'rajasthani',   label: 'Rajasthani' },
+  { key: 'hyderabadi',   label: 'Hyderabadi' },
+  { key: 'kashmiri',     label: 'Kashmiri' },
+  { key: 'other',        label: 'Other' },   // custom dishes only; no seeds, not pickable at onboarding
+]
+```
+
+### Seeding defaults (per cuisine)
+
+Seed catalogs live in `model.js` as `SEEDS[cuisineKey] = { breakfast: [...],
+lunch: [...], dinner: [...] }`. **South Indian**: port v1's `DEFAULTS` lists
+verbatim as the baseline (8 breakfast / 9 lunch / 8 dinner — names and
+ingredients from `aduppu.html` lines 407–439), tagged `cuisine:
+'south-indian'`. **Every other cuisine** (all §4.1 keys except `other`): the
+implementer authors ≥5 breakfast / ≥6 lunch / ≥5 dinner authentic, everyday
+home dishes with realistic ingredient lists — e.g. Punjabi: Aloo Paratha,
+Chole, Rajma Chawal, Sarson da Saag with Makki Roti; Bengali: Luchi–Aloor
+Dom, Shukto, Machher Jhol with rice, Cholar Dal; Marathi: Poha, Thalipeeth,
+Varan Bhaat, Pithla Bhakri, Misal. Favor daily home cooking over restaurant
+dishes, and keep ingredient names in the same normalized vocabulary the
+matcher uses (lowercase, singular).
+
+**When seeding runs:** seeding is **per cuisine**, triggered at onboarding
+(for each selected cuisine) and again whenever a cuisine is later enabled in
+Settings. For each cuisine, if meta `seeded:<cuisineKey>` is unset: insert
+its seed dishes with **deterministic ids** (`seed-<cuisineKey>-<meal>-<n>`),
+`dirty: 1`, then set the meta flag. Deterministic ids mean two devices that
 both seed produce the same Drive files and converge instead of duplicating.
-A seeded dish the user deletes stays deleted (tombstone syncs; the `seeded`
-meta prevents re-seeding).
+A seeded dish the user deletes stays deleted (tombstone syncs; the per-cuisine
+meta flag prevents re-seeding). Disabling a favorite cuisine in Settings does
+NOT delete its dishes — they stay in Cook (filterable) and simply drop out of
+randomizer/suggestion defaults.
 
 ## 5. Core algorithms
 
@@ -195,24 +240,35 @@ local date is used.
 ```js
 NO_REPEAT_DAYS = { breakfast: 2, lunch: 10, dinner: 3 }
 
-pickDish(meal, date, { dishes, plans, logs, exclude = [] })
+pickDish(meal, date, { dishes, plans, logs, exclude = [], cuisines = null })
 ```
 
-1. Build `lastUsed[name]` for this meal: latest date each dish name appears in
+1. Filter `dishes` to `cuisines` when given (an array of cuisine keys —
+   the day's chosen cuisine, or the user's favorites for "Mix").
+2. Build `lastUsed[name]` for this meal: latest date each dish name appears in
    any plan item's `meals[meal]` or any log's `dish` (exact name match) with
    `date < target date`.
-2. Pool = dishes of that meal, minus `exclude`, minus names used within
-   `NO_REPEAT_DAYS[meal]` days before `date`.
-3. If pool is non-empty → uniform random pick.
-4. If pool is empty → relax: pick the **least-recently-used** name (never-used
-   first); still honor `exclude`.
-5. Return the dish name, or `null` if the meal has no dishes at all.
+3. Pool = filtered dishes of that meal, minus `exclude`, minus names used
+   within `NO_REPEAT_DAYS[meal]` days before `date`.
+4. If pool is non-empty → uniform random pick.
+5. If pool is empty → relax in order: (a) least-recently-used within the
+   cuisine filter; (b) if the cuisine filter itself has no dishes for this
+   meal at all, widen to the user's favorite cuisines, then to all cuisines —
+   never return `null` while any dish of that meal exists.
+6. Return the dish name, or `null` if the meal has no dishes at all.
 
 Semantics in the UI:
-- **Randomize day / Randomize week**: fill **empty slots only** — never
-  overwrite a slot the user set. Sequential fill, passing already-chosen names
-  for that day in `exclude` so one day never repeats itself.
-- **Per-slot 🎲**: rerolls that slot, `exclude = [currentValue]`.
+- **Fill day / Fill week 🎲** first asks the cuisine (see §7 Plan): the
+  chosen key (or the favorites array for "Mix") flows in as `cuisines`, and a
+  single chosen cuisine is stored on the plan item(s) as `plan.cuisine`.
+- Fill **empty slots only** — never overwrite a slot the user set.
+  Sequential fill, passing already-chosen names for that day in `exclude` so
+  one day never repeats itself.
+- **Per-slot 🎲**: rerolls that slot, `exclude = [currentValue]`;
+  `cuisines` = the day's `plan.cuisine` if set, else the favorites.
+
+Tests add: cuisine filtering respected; widening fallback (a) → (b); the
+favorites-mix path draws from multiple cuisines.
 
 Pure functions over passed-in data — fully unit-testable (test: window
 exclusion per meal type, LRU fallback when pool exhausted, fill-only behavior,
@@ -293,6 +349,19 @@ local-only, show neutral gray `local`, not red** — red is reserved for real
 errors (`offline`, `update app`). `tap to sync` appears only after a previously
 signed-in session loses auth.
 
+### Onboarding: cuisine picker (first run, right after the sign-in gate)
+Shown when no `prefs` item exists locally — but for a signed-in user, only
+after the first sync round completes (an existing Drive `prefs` item means
+this device is a reinstall: skip the picker, don't re-ask). Full-screen,
+same visual language as the sign-in screen:
+- Eyebrow "YOUR KITCHEN" + heading "Which cuisines do you cook?" + lead text
+  "Pick your favourites — Aduppu seeds each one with everyday dishes and
+  plans around them. You can change this anytime in Settings."
+- A grid of tappable cuisine cards (all §4.1 keys except `other`), Nisaba
+  `.toggle`/`.seg` styling, multi-select, minimum one to continue.
+- "Continue" → create the `prefs` item, seed each selected cuisine (§4
+  Seeding), land on Today.
+
 ### Today
 - Date heading (eyebrow `TODAY` + "Thursday, 9 July" display line).
 - Three meal cards (Breakfast / Lunch / Dinner), each showing:
@@ -314,23 +383,34 @@ signed-in session loses auth.
   catalog" opens the Cook-style list in a bottom sheet, "✓ had this" logged
   indicator when a log matches that day+meal.
 - Buttons: **Fill day 🎲** and **Fill week 🎲** (fill-empty-only, §5.2).
+  Both first open a **cuisine ask** — a small bottom sheet: "What are we
+  cooking?" with one pill per favorite cuisine plus **"Mix"** (all favorites;
+  default, pre-focused so double-tap = old one-tap behavior). A single chosen
+  cuisine is stamped on the affected plan item(s) as `plan.cuisine` and shown
+  as a small chip on the day header (removable — clearing it reverts rerolls
+  to favorites-mix). Week fill applies the choice to all seven days.
 - Below, a compact **week overview**: 7 rows × 3 meal chips (no horizontal
-  scroll grid — the 640px column stacks).
+  scroll grid — the 640px column stacks); days with a cuisine show its chip.
 
 ### Cook
-- Search bar (Nisaba's pill search) filtering by name / ingredient / tag.
+- Search bar (Nisaba's pill search) filtering by name / ingredient / tag /
+  cuisine.
 - Mode toggle pills: **All dishes | From my kitchen**.
-- *All dishes*: meal-type filter chips (All/Breakfast/Lunch/Dinner); dish cards
-  grouped by meal with eyebrow headings; card = name + ingredient preview +
-  tag chips; expands in place (Nisaba task-card pattern) to full ingredients,
-  ref, notes, meal selector — all inline-editable; ⋯ menu → Delete (Undo
-  toast). Inline **add composer** at top: name + meal select, Enter saves,
+- *All dishes*: meal-type filter chips (All/Breakfast/Lunch/Dinner) plus a
+  **cuisine filter** (All + one chip per cuisine that has dishes — favorites
+  first); dish cards grouped by meal with eyebrow headings; card = name +
+  cuisine chip + ingredient preview + tag chips; expands in place (Nisaba
+  task-card pattern) to full ingredients, ref, notes, meal selector, cuisine
+  selector — all inline-editable; ⋯ menu → Delete (Undo toast). Inline **add
+  composer** at top: name + meal select (new dishes default to the user's
+  first favorite cuisine; changeable in the expanded editor), Enter saves,
   expand-to-edit for details.
 - *From my kitchen*: pantry chip input (type + Enter adds a chip, ✕ removes;
   persisted via the `pantry` item), "I have the basics" staples toggle, then
   two sections: **Can cook now** (full matches) and **Almost there** (partial,
-  sorted by score, "Need: …" line). Each result: "Plan it →" (day/meal picker
-  sheet) and "Log it" shortcuts.
+  sorted by score, "Need: …" line). Results default to the favorite cuisines
+  (the same cuisine chips as *All dishes* widen the net). Each result:
+  "Plan it →" (day/meal picker sheet) and "Log it" shortcuts.
 
 ### Track
 - Range toggle pills: **7 days | This month | All**.
@@ -347,6 +427,12 @@ signed-in session loses auth.
 ### Settings (gear)
 Port Nisaba's Settings structure, minus Note-text card, minus Trash:
 - **Appearance**: Paper / Lights out toggle.
+- **Cuisines**: the same multi-select cuisine chips as onboarding (min 1),
+  editing the synced `prefs` item. Enabling a cuisine that has never been
+  seeded on this account triggers its seeding (§4) with a toast ("Added 16
+  Punjabi dishes to Cook"); disabling one only removes it from randomizer /
+  suggestion defaults — its dishes stay in Cook. Lead text explains exactly
+  that.
 - **Account & sync**: Drive status pill, item count, Connect/Sign out.
 - **App & storage**: install state + Install button (pwaInstall), offline-copy
   persistence row, **Export backup** / **Import backup** buttons (§5.4).
@@ -385,9 +471,10 @@ Same skeleton as Nisaba's `App.jsx`:
 - `store` singleton, `useMemo` auth+drive+engine on `clientId`.
 - 30s interval + focus-listener sync; `engine.gc()` after sync.
 - `saveItem(partial)` = upsert + `updated_at` + `dirty:1` + `engine.schedule()`.
-- Seed defaults (§4) in the initial `useEffect` before first `refresh()`.
+- Onboarding gate: after the sign-in gate, render the cuisine picker until a
+  `prefs` item exists (§7 Onboarding); seeding (§4) runs per selected cuisine.
 - Derived state per tab from `items`: `dishes`, `plansByDate` (Map),
-  `logsByDate`, `grocery`, `pantry`.
+  `logsByDate`, `grocery`, `pantry`, `prefs` (favorite cuisines).
 - Undo toast helper: `deleteWithUndo(item)` tombstones immediately, shows toast
   5s with Undo → restores (`deleted:false`). One toast at a time.
 - STATUS_LABEL per Nisaba minus the guilt-red mapping change (§7 sign-in).
@@ -415,7 +502,9 @@ Same skeleton as Nisaba's `App.jsx`:
   BlockNote).
 - Playwright smoke script (pattern exists from the review session): dev server
   + headless Chromium (`/opt/pw-browsers/chromium`), viewport 390×844:
-  skip sign-in → seed visible in Cook → plan a day via 🎲 → "Cooked this ✓" on
+  skip sign-in → onboarding picker: select two cuisines (e.g. South Indian +
+  Punjabi) → both cuisines' seeds visible in Cook with cuisine chips → Fill
+  day 🎲 choosing "Punjabi" plans only Punjabi dishes → "Cooked this ✓" on
   Today → log an ordered meal with cost → Track shows correct stats → dark
   mode → screenshots of all five screens. Attach screenshots to the PR/summary.
 - Manual checklist in the summary for the owner (things only they can do):
