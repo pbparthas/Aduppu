@@ -5,7 +5,7 @@ compatibility_date = "2024-11-01"
 # Public client id (baked into the app too). The SECRET is set separately with
 # `wrangler secret put GOOGLE_CLIENT_SECRET` — never put it in this file.
 [vars]
-GOOGLE_CLIENT_ID = "REPLACE_WITH_GOOGLE_CLIENT_ID"
+GOOGLE_CLIENT_ID = "934726535844-mu79uunbbckj8v67i3gb5vk619grn86o.apps.googleusercontent.com"
 ALLOWED_ORIGINS = "https://aduppu.orionforge.dev,http://localhost:5173"
 COOKIE_DOMAIN = "orionforge.dev"
 
@@ -14,7 +14,7 @@ COOKIE_DOMAIN = "orionforge.dev"
 # then paste the returned id below.
 [[kv_namespaces]]
 binding = "SESSIONS"
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
+id = "c0cc4ea8d4c64894a9f4adff66564713"
 
 # Serve it at auth.orionforge.dev. Easiest is to add a Custom Domain in the
 # Cloudflare dashboard (Workers & Pages → aduppu-auth → Settings → Domains &
