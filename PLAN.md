@@ -32,6 +32,13 @@ catalog with ingredients + optional recipe details, suggest what to cook from
 what's in the kitchen, and track home-vs-out stats and grocery spend. Currency ₹,
 dates in local time (IST in practice), en-IN formatting.
 
+**Usage assumption (owner-confirmed):** one user, one primary mobile device per
+login. Drive sync exists for durability (phone loss/wipe, future device
+migration), not for concurrent multi-device editing. Consequence: the simple
+merge choices below (newer-wins for every type, whole-list pantry singleton)
+are deliberate and final for v1 — do NOT add conflict copies, field-level
+merging, or CRDT-style pantry merging.
+
 ## 2. Repository layout (target)
 
 ```
