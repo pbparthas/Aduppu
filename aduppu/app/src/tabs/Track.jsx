@@ -14,14 +14,6 @@ function formatCurrency(amount) {
 
 function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
 
-// ── Shared input style ───────────────────────────────────────────────────────
-
-const INPUT_STYLE = {
-  padding: '6px 8px', border: '1px solid var(--border, #ddd)',
-  borderRadius: '6px', fontSize: '0.8rem', fontFamily: 'Inter, sans-serif',
-  boxSizing: 'border-box', background: 'var(--card-bg, #fff)', color: 'var(--ink, #222)',
-};
-
 // ═════════════════════════════════════════════════════════════════════════════
 // Track component
 // ═════════════════════════════════════════════════════════════════════════════
@@ -171,10 +163,10 @@ export default function Track({
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="tab-content track-tab">
+    <div className="screen">
 
       {/* ── Range toggle ── */}
-      <div className="seg-group" style={{ display: 'flex', gap: '4px', padding: '12px 16px 8px' }}>
+      <div className="seg">
         {[
           { key: '7days',  label: '7 days' },
           { key: '30days', label: 'This month' },
@@ -182,7 +174,7 @@ export default function Track({
         ].map(({ key, label }) => (
           <button
             key={key}
-            className={`seg${range === key ? ' active' : ''}`}
+            className={range === key ? 'on' : undefined}
             onClick={() => setRange(key)}
           >
             {label}
@@ -191,14 +183,12 @@ export default function Track({
       </div>
 
       {/* ── Summary card ── */}
-      <div className="card" style={{ margin: '0 16px 12px', padding: '16px' }}>
-        <p style={{ margin: 0, fontSize: '0.9375rem', lineHeight: 1.5 }}>
-          {summaryText}
-        </p>
+      <div className="card" style={{ marginTop: 10 }}>
+        <p>{summaryText}</p>
       </div>
 
-      {/* ── 2x2 stat tiles ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', padding: '0 16px 12px' }}>
+      {/* ── 2×2 stat tiles ── */}
+      <div className="stat-grid">
         <StatTile label="Home Cooked" value={stats.homeCooked} />
         <StatTile label="Ordered" value={stats.ordered} />
         <StatTile label="Order Spend" value={formatCurrency(stats.orderSpend)} />
@@ -206,106 +196,100 @@ export default function Track({
       </div>
 
       {/* ── Grocery section ── */}
-      <div style={{ padding: '0 16px 12px' }}>
-        <div className="eyebrow">Groceries</div>
+      <div className="section">
+        <span className="eyebrow">Groceries</span>
 
-        {/* Add composer */}
         {addingGrocery ? (
-          <div className="card" style={{ padding: '12px', marginBottom: '8px' }}>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <div className="card" style={{ marginTop: 10 }}>
+            <div className="add-composer">
               <input
                 type="date"
                 value={groceryDate}
                 onChange={(e) => setGroceryDate(e.target.value)}
-                style={{ ...INPUT_STYLE, flex: '0 0 auto' }}
+                style={{ flex: 'none' }}
               />
-              <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
-                <span style={{ fontSize: '0.875rem' }}>{'₹'}</span>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  placeholder="Amount"
-                  value={groceryAmount}
-                  onChange={(e) => setGroceryAmount(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleAddGrocery(); }}
-                  autoFocus
-                  style={{ ...INPUT_STYLE, width: '80px' }}
-                />
-              </div>
+              <span>₹</span>
+              <input
+                type="number"
+                inputMode="decimal"
+                placeholder="Amount"
+                value={groceryAmount}
+                onChange={(e) => setGroceryAmount(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleAddGrocery(); }}
+                autoFocus
+                style={{ maxWidth: 100 }}
+              />
               <input
                 type="text"
                 placeholder="Note (optional)"
                 value={groceryNote}
                 onChange={(e) => setGroceryNote(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') handleAddGrocery(); }}
-                style={{ ...INPUT_STYLE, flex: 1, minWidth: '100px' }}
               />
             </div>
-            <div style={{ display: 'flex', gap: '8px', marginTop: '8px', justifyContent: 'flex-end' }}>
-              <button className="btn" onClick={() => setAddingGrocery(false)} style={{ opacity: 0.6 }}>
-                Cancel
-              </button>
-              <button className="btn" onClick={handleAddGrocery}>Add</button>
+            <div className="btn-row">
+              <div className="spacer" />
+              <button className="btn ghost" onClick={() => setAddingGrocery(false)}>Cancel</button>
+              <button className="btn accent" onClick={handleAddGrocery}>Add</button>
             </div>
           </div>
         ) : (
           <button
-            className="btn"
+            className="add-task"
             onClick={() => { setAddingGrocery(true); setGroceryDate(localDateStr()); }}
-            style={{ width: '100%', textAlign: 'center', marginBottom: '8px' }}
           >
-            + Add grocery entry
+            <span className="plus">+</span>
+            Add grocery entry
           </button>
         )}
 
         {/* Grocery entries list */}
-        {sortedGrocery.map((g) => (
-          <GroceryRow
-            key={g.id}
-            grocery={g}
-            editing={editingGroceryId === g.id}
-            onEdit={() => setEditingGroceryId(editingGroceryId === g.id ? null : g.id)}
-            saveItem={saveItem}
-            deleteWithUndo={deleteWithUndo}
-          />
-        ))}
+        <div className="list">
+          {sortedGrocery.map((g) => (
+            <GroceryRow
+              key={g.id}
+              grocery={g}
+              editing={editingGroceryId === g.id}
+              onEdit={() => setEditingGroceryId(editingGroceryId === g.id ? null : g.id)}
+              saveItem={saveItem}
+              deleteWithUndo={deleteWithUndo}
+            />
+          ))}
+        </div>
       </div>
 
       {/* ── Meal log ── */}
-      <div style={{ padding: '0 16px 12px' }}>
-        <div className="eyebrow">Meal Log</div>
+      <div className="section">
+        <span className="eyebrow">Meal Log</span>
 
         {sortedLogDates.map((date) => (
-          <div key={date} style={{ marginBottom: '12px' }}>
-            <div style={{
-              fontSize: '0.8rem', fontWeight: 600, color: 'var(--muted, #666)',
-              marginBottom: '4px', paddingLeft: '2px',
-            }}>
-              {dayLabel(date)}
+          <div key={date} style={{ marginTop: 14 }}>
+            <span className="eyebrow">{dayLabel(date)}</span>
+            <div className="list">
+              {logsByDate[date].map((log) => (
+                <LogRow
+                  key={log.id}
+                  log={log}
+                  selMode={selMode}
+                  selected={selIds.has(log.id)}
+                  editing={editingLogId === log.id && !selMode}
+                  onTap={() => {
+                    if (selMode) toggleSelection(log.id);
+                    else setEditingLogId(editingLogId === log.id ? null : log.id);
+                  }}
+                  onTouchStart={() => handleTouchStart(log.id)}
+                  onTouchEnd={handleTouchEnd}
+                  onTouchMove={handleTouchMove}
+                  saveItem={saveItem}
+                  deleteWithUndo={deleteWithUndo}
+                />
+              ))}
             </div>
-            {logsByDate[date].map((log) => (
-              <LogRow
-                key={log.id}
-                log={log}
-                selMode={selMode}
-                selected={selIds.has(log.id)}
-                editing={editingLogId === log.id && !selMode}
-                onTap={() => {
-                  if (selMode) toggleSelection(log.id);
-                  else setEditingLogId(editingLogId === log.id ? null : log.id);
-                }}
-                onTouchStart={() => handleTouchStart(log.id)}
-                onTouchEnd={handleTouchEnd}
-                onTouchMove={handleTouchMove}
-                saveItem={saveItem}
-                deleteWithUndo={deleteWithUndo}
-              />
-            ))}
           </div>
         ))}
 
         {filteredLogs.length === 0 && (
-          <div style={{ padding: '16px', textAlign: 'center', color: 'var(--muted, #888)' }}>
+          <div className="empty">
             No meals logged {rangeLabel}.
           </div>
         )}
@@ -313,37 +297,17 @@ export default function Track({
 
       {/* ── Selection bar ── */}
       {selMode && (
-        <div
-          className="selbar"
-          style={{
-            position: 'fixed', bottom: 0, left: 0, right: 0,
-            background: 'var(--selbar-bg, #333)', color: '#fff',
-            padding: '12px 16px env(safe-area-inset-bottom, 0)',
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            zIndex: 100,
-          }}
-        >
-          <span style={{ fontSize: '0.875rem' }}>{selIds.size} selected</span>
-          <div style={{ display: 'flex', gap: '12px' }}>
-            <button
-              onClick={() => { setSelMode(false); setSelIds(new Set()); }}
-              style={{
-                color: '#fff', background: 'none', border: 'none',
-                cursor: 'pointer', fontSize: '0.875rem',
-              }}
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleBulkDelete}
-              style={{
-                color: '#ef5350', background: 'none', border: 'none',
-                cursor: 'pointer', fontSize: '0.875rem', fontWeight: 600,
-              }}
-            >
-              Delete
-            </button>
-          </div>
+        <div className="selbar">
+          <button
+            className="btn ghost"
+            onClick={() => { setSelMode(false); setSelIds(new Set()); }}
+          >
+            Cancel
+          </button>
+          <span className="selcount">{selIds.size} selected</span>
+          <button className="btn danger-fill" onClick={handleBulkDelete}>
+            Delete
+          </button>
         </div>
       )}
     </div>
@@ -351,21 +315,14 @@ export default function Track({
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// StatTile — big-number stat card
+// StatTile — big-number stat card (Saira Condensed via .stat-num)
 // ═════════════════════════════════════════════════════════════════════════════
 
 function StatTile({ label, value }) {
   return (
-    <div className="stat-tile card" style={{ padding: '12px', textAlign: 'center' }}>
-      <div style={{
-        fontFamily: '"Saira Condensed", sans-serif',
-        fontSize: '1.75rem', fontWeight: 600, lineHeight: 1.1,
-      }}>
-        {value}
-      </div>
-      <div style={{ fontSize: '0.75rem', color: 'var(--muted, #666)', marginTop: '4px' }}>
-        {label}
-      </div>
+    <div className="stat-tile">
+      <div className="stat-num">{value}</div>
+      <div className="stat-label">{label}</div>
     </div>
   );
 }
@@ -376,30 +333,22 @@ function StatTile({ label, value }) {
 
 function GroceryRow({ grocery, editing, onEdit, saveItem, deleteWithUndo }) {
   return (
-    <div className="card" style={{ padding: '10px 12px', marginBottom: '4px' }}>
+    <div className="card">
       {/* Summary row */}
-      <div
-        onClick={onEdit}
-        style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}
-      >
-        <span style={{ fontSize: '0.8rem', color: 'var(--muted, #666)', minWidth: '60px' }}>
+      <div className="task-row" onClick={onEdit}>
+        <span className="lead" style={{ minWidth: 60, flexShrink: 0 }}>
           {dayLabel(grocery.date)}
         </span>
-        <span style={{ flex: 1, fontSize: '0.875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <span className="task-main">
           {grocery.note || 'Groceries'}
         </span>
-        <span style={{ fontWeight: 600, fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
-          {formatCurrency(grocery.amount)}
-        </span>
+        <strong>{formatCurrency(grocery.amount)}</strong>
       </div>
 
       {/* Inline edit */}
       {editing && (
-        <div
-          style={{ marginTop: '8px', borderTop: '1px solid var(--border, #eee)', paddingTop: '8px' }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+        <div className="task-detail" onClick={(e) => e.stopPropagation()}>
+          <div className="add-composer">
             <input
               type="date"
               key={`gd-${grocery.id}-${grocery.updated_at}`}
@@ -409,22 +358,20 @@ function GroceryRow({ grocery, editing, onEdit, saveItem, deleteWithUndo }) {
                   saveItem({ ...grocery, date: e.target.value });
                 }
               }}
-              style={INPUT_STYLE}
+              style={{ flex: 'none' }}
             />
-            <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
-              <span style={{ fontSize: '0.8rem' }}>{'₹'}</span>
-              <input
-                type="number"
-                inputMode="decimal"
-                key={`ga-${grocery.id}-${grocery.updated_at}`}
-                defaultValue={grocery.amount}
-                onBlur={(e) => {
-                  const v = parseFloat(e.target.value);
-                  if (!isNaN(v) && v !== grocery.amount) saveItem({ ...grocery, amount: v });
-                }}
-                style={{ ...INPUT_STYLE, width: '80px' }}
-              />
-            </div>
+            <span>₹</span>
+            <input
+              type="number"
+              inputMode="decimal"
+              key={`ga-${grocery.id}-${grocery.updated_at}`}
+              defaultValue={grocery.amount}
+              onBlur={(e) => {
+                const v = parseFloat(e.target.value);
+                if (!isNaN(v) && v !== grocery.amount) saveItem({ ...grocery, amount: v });
+              }}
+              style={{ maxWidth: 80 }}
+            />
             <input
               type="text"
               key={`gn-${grocery.id}-${grocery.updated_at}`}
@@ -433,16 +380,14 @@ function GroceryRow({ grocery, editing, onEdit, saveItem, deleteWithUndo }) {
                 if (e.target.value !== (grocery.note || '')) saveItem({ ...grocery, note: e.target.value });
               }}
               placeholder="Note"
-              style={{ ...INPUT_STYLE, flex: 1, minWidth: '100px' }}
             />
           </div>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
+          <div className="btn-row">
+            <div className="spacer" />
             <button
+              className="btn ghost"
+              style={{ color: 'var(--overdue)' }}
               onClick={() => deleteWithUndo(grocery)}
-              style={{
-                color: '#c62828', background: 'none', border: 'none',
-                cursor: 'pointer', fontSize: '0.8rem',
-              }}
             >
               Delete
             </button>
@@ -462,15 +407,13 @@ function LogRow({
   onTap, onTouchStart, onTouchEnd, onTouchMove,
   saveItem, deleteWithUndo,
 }) {
+  const mealClass = log.meal || 'lunch';
   const modeIcon = log.mode === 'home' ? '🏠' : '🛵';
+  const modeLabel = log.mode === 'home' ? 'Home' : 'Order';
 
   return (
     <div
       className={`card${selected ? ' selected' : ''}`}
-      style={{
-        padding: '8px 12px', marginBottom: '4px', cursor: 'pointer',
-        ...(selected ? { background: 'var(--sel-bg, #e3f2fd)' } : {}),
-      }}
       onClick={onTap}
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
@@ -478,27 +421,23 @@ function LogRow({
       onContextMenu={(e) => e.preventDefault()}
     >
       {/* Summary row */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+      <div className="task-row">
         {selMode && (
-          <input
-            type="checkbox"
-            checked={selected}
-            readOnly
-            style={{ marginRight: '2px', flexShrink: 0 }}
-          />
+          <button className={`tick${selected ? ' done' : ''}`}>
+            {selected ? '✓' : ''}
+          </button>
         )}
-        <span className="chip" style={{ fontSize: '0.7rem', flexShrink: 0 }}>
+        <span className={`chip ${mealClass}`}>
           {cap(log.meal || '')}
         </span>
-        <span style={{ fontSize: '0.85rem', flexShrink: 0 }}>{modeIcon}</span>
-        <span style={{
-          flex: 1, fontSize: '0.875rem', overflow: 'hidden',
-          textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        }}>
+        <span className="chip plain">
+          {modeIcon} {modeLabel}
+        </span>
+        <span className="task-main">
           {log.dish || ''}
         </span>
         {(log.cost || 0) > 0 && (
-          <span style={{ fontSize: '0.8rem', color: 'var(--muted, #666)', whiteSpace: 'nowrap', flexShrink: 0 }}>
+          <span className="lead" style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
             {formatCurrency(log.cost)}
           </span>
         )}
@@ -506,21 +445,15 @@ function LogRow({
 
       {/* Notes preview */}
       {log.notes && !editing && (
-        <div style={{
-          fontSize: '0.75rem', color: 'var(--muted, #888)', marginTop: '2px',
-          paddingLeft: selMode ? '24px' : '0',
-        }}>
+        <p className="lead" style={selMode ? { paddingLeft: 34 } : undefined}>
           {log.notes}
-        </div>
+        </p>
       )}
 
       {/* Inline edit (only when not in selection mode) */}
       {editing && (
-        <div
-          style={{ marginTop: '8px', borderTop: '1px solid var(--border, #eee)', paddingTop: '8px' }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+        <div className="task-detail" onClick={(e) => e.stopPropagation()}>
+          <div className="add-composer">
             <input
               type="text"
               key={`ld-${log.id}-${log.updated_at}`}
@@ -529,30 +462,29 @@ function LogRow({
                 if (e.target.value !== (log.dish || '')) saveItem({ ...log, dish: e.target.value });
               }}
               placeholder="Dish name"
-              style={{ ...INPUT_STYLE, flex: 1, minWidth: '120px' }}
             />
             <select
+              className="btn small"
               key={`lm-${log.id}-${log.updated_at}`}
               defaultValue={log.meal || 'lunch'}
               onChange={(e) => saveItem({ ...log, meal: e.target.value })}
-              style={INPUT_STYLE}
             >
               <option value="breakfast">Breakfast</option>
               <option value="lunch">Lunch</option>
               <option value="dinner">Dinner</option>
             </select>
             <select
+              className="btn small"
               key={`lmd-${log.id}-${log.updated_at}`}
               defaultValue={log.mode || 'home'}
               onChange={(e) => saveItem({ ...log, mode: e.target.value })}
-              style={INPUT_STYLE}
             >
-              <option value="home">{'🏠'} Home</option>
-              <option value="out">{'🛵'} Ordered</option>
+              <option value="home">🏠 Home</option>
+              <option value="out">🛵 Ordered</option>
             </select>
           </div>
-          <div style={{ display: 'flex', gap: '6px', marginTop: '6px', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.8rem' }}>{'₹'}</span>
+          <div className="add-composer">
+            <span>₹</span>
             <input
               type="number"
               inputMode="decimal"
@@ -562,7 +494,7 @@ function LogRow({
                 const v = parseFloat(e.target.value) || 0;
                 if (v !== (log.cost || 0)) saveItem({ ...log, cost: v });
               }}
-              style={{ ...INPUT_STYLE, width: '70px' }}
+              style={{ maxWidth: 70 }}
             />
             <input
               type="text"
@@ -572,16 +504,14 @@ function LogRow({
                 if (e.target.value !== (log.notes || '')) saveItem({ ...log, notes: e.target.value });
               }}
               placeholder="Notes"
-              style={{ ...INPUT_STYLE, flex: 1, minWidth: '100px' }}
             />
           </div>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
+          <div className="btn-row">
+            <div className="spacer" />
             <button
+              className="btn ghost"
+              style={{ color: 'var(--overdue)' }}
               onClick={() => deleteWithUndo(log)}
-              style={{
-                color: '#c62828', background: 'none', border: 'none',
-                cursor: 'pointer', fontSize: '0.8rem',
-              }}
             >
               Delete
             </button>
