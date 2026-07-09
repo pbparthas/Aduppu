@@ -218,9 +218,10 @@ export default function Plan({
     if (mode === 'day') {
       await fillDay(day, cuisineKey);
     } else {
-      // Fill week: sequential so each day can use its own exclude list
+      // Fill week: only today and future days, not past days
+      const todayStr = localDateStr();
       for (const d of days) {
-        await fillDay(d, cuisineKey);
+        if (d >= todayStr) await fillDay(d, cuisineKey);
       }
     }
   }, [showCuisineAsk, days, fillDay]);
