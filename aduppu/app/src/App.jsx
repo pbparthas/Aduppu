@@ -645,6 +645,18 @@ function Settings({ mode, setAppMode, signedIn, status, statusKey, onSignIn, onS
     }
   }
 
+  async function reseedAll() {
+    if (!prefsItem) return;
+    const diet = prefsItem.diet || 'all';
+    const allKeys = expandCuisines(prefsItem.cuisines || []);
+    let total = 0;
+    for (const key of allKeys) {
+      total += await seedCuisine(store, key, diet);
+    }
+    await refresh();
+    showToast(total > 0 ? `Seeded ${total} new dishes.` : 'All cuisines already seeded.');
+  }
+
   async function handleExport() {
     try {
       const blob = await exportAll(store);
@@ -722,6 +734,9 @@ function Settings({ mode, setAppMode, signedIn, status, statusKey, onSignIn, onS
           onToggle={toggleSettingsCuisine}
         />
         <p className="lead" style={{ marginTop: 8 }}>Enabling a new cuisine seeds its signature dishes into your catalog. Disabling one keeps its dishes in Cook.</p>
+        <div className="btn-row">
+          <button className="btn" onClick={reseedAll}>Re-seed all cuisines</button>
+        </div>
       </div>
 
       <div className="card set-card">
