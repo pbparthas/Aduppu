@@ -1,0 +1,62 @@
+# Aduppu auth broker (Cloudflare Worker)
+
+Keeps the Google session alive so the PWA doesn't ask you to sign in every
+hour. It holds the **refresh token** in Cloudflare KV (never in the browser)
+and mints fresh access tokens on demand. It only ever touches auth tokens —
+your recipes still go browser → Google Drive directly and never pass through it.
+
+## One-time setup
+
+Everything runs from this `aduppu/worker/` folder.
+
+### 1. Install Wrangler and log in
+```bash
+cd aduppu/worker
+npm install
+npx wrangler login       # opens a browser to authorise Cloudflare
+```
+
+### 2. Get your Google client secret
+- Go to https://console.cloud.google.com/apis/credentials
+- Open your existing OAuth 2.0 **Web application** client (the one whose ID is
+  already baked into the app).
+- Copy the **Client secret** (it's already there — the browser flow just never
+  used it).
+- Make sure **Authorized JavaScript origins** includes `https://aduppu.orionforge.dev`
+  (already added). No redirect URI is needed — the popup flow uses `postmessage`.
+
+### 3. Create the KV namespace
+```bash
+npx wrangler kv namespace create SESSIONS
+```
+Copy the printed `id` into `wrangler.toml` (replace `REPLACE_WITH_KV_NAMESPACE_ID`).
+
+### 4. Store the secret
+```bash
+npx wrangler secret put GOOGLE_CLIENT_SECRET
+# paste the client secret when prompted
+```
+
+### 5. Deploy
+```bash
+npx wrangler deploy
+```
+
+### 6. Put it on auth.orionforge.dev
+In the Cloudflare dashboard: **Workers & Pages → aduppu-auth → Settings →
+Domains & Routes → Add → Custom Domain →** `auth.orionforge.dev`.
+Cloudflare creates the DNS record automatically.
+
+### 7. Turn it on in the app
+Done — `AUTH_WORKER_DEFAULT = 'https://auth.orionforge.dev'` is set in
+`app/src/lib/auth.js`, so every user gets persistent login by default. To point
+at a *different* broker without a rebuild, run
+`localStorage.setItem('ad_auth_worker','https://your-worker')` in the browser
+console; clear it with `localStorage.removeItem('ad_auth_worker')`.
+
+## Notes
+- The **first** connection must grant consent so Google issues a refresh token;
+  a new origin (aduppu.orionforge.dev) does this automatically.
+- Sign out in the app calls `/revoke`, which revokes the refresh token and
+  clears the session.
+- Free tier is plenty: KV free tier and Workers free tier cover personal use.

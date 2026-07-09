@@ -1,0 +1,50 @@
+name: Deploy Aduppu to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths: ['aduppu/**', '.github/workflows/deploy-pages.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install
+        working-directory: aduppu/app
+        run: npm ci
+      - name: Test
+        working-directory: aduppu/app
+        run: npm test
+      - name: Build
+        working-directory: aduppu/app
+        # Served at the root of the custom domain (aduppu.orionforge.dev), so
+        # the base is '/'. (Was /Aduppu/ for the project-page URL.)
+        run: npm run build
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: aduppu/app/dist
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
