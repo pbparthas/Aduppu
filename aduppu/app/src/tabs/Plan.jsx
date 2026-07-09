@@ -258,22 +258,20 @@ export default function Plan({
 
   const pickerDishes = useMemo(() => {
     if (!showPicker) return [];
-    const { day, meal } = showPicker;
-    const plan = getPlan(day);
-    let list = dishes.filter(d => d.meal === meal && !d.deleted);
+    const { meal } = showPicker;
+    let list = dishes.filter(d => d.meal === meal);
 
-    if (plan?.cuisine) {
-      const cs = expandCuisines([plan.cuisine]);
-      list = list.filter(d => cs.has(d.cuisine));
-    }
     if (pickerSearch.trim()) {
       const q = pickerSearch.toLowerCase();
-      list = list.filter(d => d.name.toLowerCase().includes(q));
+      list = list.filter(d =>
+        d.name.toLowerCase().includes(q) ||
+        (d.ingredients || []).some(ing => ing.toLowerCase().includes(q))
+      );
     }
 
     list.sort((a, b) => a.name.localeCompare(b.name));
     return list;
-  }, [showPicker, dishes, getPlan, pickerSearch]);
+  }, [showPicker, dishes, pickerSearch]);
 
   /* ── remove cuisine from a day ─────────────────────── */
 
