@@ -70,37 +70,52 @@ export const DIET_ALLOWED = {
 
 // ---------------------------------------------------------------------------
 // Seed dish catalogs (per cuisine key)
+// Each dish: { name, diet: 'veg'|'egg'|'nonveg', ingredients: [...], tags: [], ref: '', notes: '' }
+// Grouped under breakfast/lunch/dinner arrays per cuisine key.
 // ---------------------------------------------------------------------------
+const D = (name, diet, ingredients, tags = []) => ({ name, diet, ingredients, tags, ref: '', notes: '' });
+const V = (name, ing, tags) => D(name, 'veg', ing, tags);
+const E = (name, ing, tags) => D(name, 'egg', ing, tags);
+const N = (name, ing, tags) => D(name, 'nonveg', ing, tags);
+
 export const SEEDS = {
   // =========================================================================
-  // TAMIL NADU (ported from v1 DEFAULTS verbatim — all veg)
+  // TAMIL NADU — everyday home cooking
   // =========================================================================
   'tamil-nadu': {
     breakfast: [
-      { name: 'Idli', meal: 'breakfast', cuisine: 'tamil-nadu', diet: 'veg', ingredients: ['rice', 'urad dal', 'salt'], tags: [], ref: '', notes: '' },
-      { name: 'Dosa', meal: 'breakfast', cuisine: 'tamil-nadu', diet: 'veg', ingredients: ['rice', 'urad dal', 'oil', 'salt'], tags: [], ref: '', notes: '' },
-      { name: 'Pongal', meal: 'breakfast', cuisine: 'tamil-nadu', diet: 'veg', ingredients: ['rice', 'moong dal', 'ghee', 'pepper', 'cumin', 'ginger'], tags: [], ref: '', notes: '' },
-      { name: 'Upma', meal: 'breakfast', cuisine: 'tamil-nadu', diet: 'veg', ingredients: ['rava', 'onion', 'green chilli', 'mustard', 'curry leaves', 'oil'], tags: [], ref: '', notes: '' },
-      { name: 'Idiyappam', meal: 'breakfast', cuisine: 'tamil-nadu', diet: 'veg', ingredients: ['rice flour', 'salt', 'oil'], tags: [], ref: '', notes: '' },
-      { name: 'Poori', meal: 'breakfast', cuisine: 'tamil-nadu', diet: 'veg', ingredients: ['wheat flour', 'oil', 'salt'], tags: [], ref: '', notes: '' },
-      { name: 'Kichadi', meal: 'breakfast', cuisine: 'tamil-nadu', diet: 'veg', ingredients: ['rava', 'curd', 'onion', 'green chilli', 'mustard', 'curry leaves'], tags: [], ref: '', notes: '' },
-      { name: 'Adai', meal: 'breakfast', cuisine: 'tamil-nadu', diet: 'veg', ingredients: ['rice', 'chana dal', 'urad dal', 'red chilli', 'curry leaves'], tags: [], ref: '', notes: '' },
+      V('Idli with Sambar', ['rice', 'urad dal', 'toor dal', 'tamarind', 'drumstick', 'sambar powder'], ['comfort']),
+      V('Masala Dosa', ['rice', 'urad dal', 'potato', 'onion', 'mustard', 'turmeric', 'gingelly oil'], ['popular']),
+      V('Plain Dosa with Chutney', ['rice', 'urad dal', 'coconut', 'green chilli', 'gingelly oil']),
+      V('Ven Pongal', ['rice', 'moong dal', 'ghee', 'pepper', 'cumin', 'ginger', 'cashew', 'curry leaves'], ['comfort']),
+      V('Rava Upma', ['rava', 'onion', 'green chilli', 'mustard', 'urad dal', 'curry leaves', 'gingelly oil'], ['quick']),
+      V('Semiya Upma', ['vermicelli', 'onion', 'green chilli', 'mustard', 'curry leaves', 'peanut', 'oil'], ['quick']),
+      V('Idiyappam with Coconut Milk', ['rice flour', 'coconut milk', 'salt'], ['comfort']),
+      V('Poori with Potato Masala', ['wheat flour', 'potato', 'onion', 'turmeric', 'mustard', 'oil']),
+      V('Adai with Aviyal', ['rice', 'chana dal', 'urad dal', 'toor dal', 'red chilli', 'curry leaves', 'coconut']),
+      V('Rava Kichadi', ['rava', 'curd', 'onion', 'green chilli', 'mustard', 'curry leaves', 'ginger'], ['quick']),
+      V('Paniyaram', ['rice', 'urad dal', 'onion', 'carrot', 'curry leaves', 'oil'], ['quick']),
+      E('Egg Dosa', ['rice', 'urad dal', 'egg', 'onion', 'green chilli', 'oil']),
     ],
     lunch: [
-      { name: 'Sambar Rice', meal: 'lunch', cuisine: 'tamil-nadu', diet: 'veg', ingredients: ['rice', 'toor dal', 'tomato', 'tamarind', 'onion', 'sambar powder'], tags: [], ref: '', notes: '' },
-      { name: 'Rasam Rice', meal: 'lunch', cuisine: 'tamil-nadu', diet: 'veg', ingredients: ['rice', 'tomato', 'tamarind', 'pepper', 'cumin', 'garlic'], tags: [], ref: '', notes: '' },
-      { name: 'Curd Rice', meal: 'lunch', cuisine: 'tamil-nadu', diet: 'veg', ingredients: ['rice', 'curd', 'mustard', 'curry leaves', 'green chilli', 'ginger'], tags: [], ref: '', notes: '' },
-      { name: 'Lemon Rice', meal: 'lunch', cuisine: 'tamil-nadu', diet: 'veg', ingredients: ['rice', 'lemon', 'turmeric', 'peanut', 'mustard', 'curry leaves'], tags: [], ref: '', notes: '' },
-      { name: 'Tamarind Rice', meal: 'lunch', cuisine: 'tamil-nadu', diet: 'veg', ingredients: ['rice', 'tamarind', 'peanut', 'mustard', 'curry leaves', 'sesame'], tags: [], ref: '', notes: '' },
-      { name: 'Kootu', meal: 'lunch', cuisine: 'tamil-nadu', diet: 'veg', ingredients: ['vegetable', 'coconut', 'urad dal', 'mustard', 'curry leaves'], tags: [], ref: '', notes: '' },
-      { name: 'Kara Kuzhambu', meal: 'lunch', cuisine: 'tamil-nadu', diet: 'veg', ingredients: ['tamarind', 'onion', 'tomato', 'coconut', 'kuzhambu powder', 'oil'], tags: [], ref: '', notes: '' },
-      { name: 'Mor Kuzhambu', meal: 'lunch', cuisine: 'tamil-nadu', diet: 'veg', ingredients: ['curd', 'coconut', 'cumin', 'green chilli', 'turmeric'], tags: [], ref: '', notes: '' },
-      { name: 'Paruppu Rice', meal: 'lunch', cuisine: 'tamil-nadu', diet: 'veg', ingredients: ['rice', 'toor dal', 'ghee', 'pepper', 'cumin', 'mustard'], tags: [], ref: '', notes: '' },
+      V('Sambar Rice', ['rice', 'toor dal', 'drumstick', 'tomato', 'tamarind', 'onion', 'sambar powder', 'gingelly oil'], ['rice', 'comfort']),
+      V('Rasam Rice', ['rice', 'tomato', 'tamarind', 'pepper', 'cumin', 'garlic', 'mustard', 'curry leaves'], ['rice', 'comfort']),
+      V('Curd Rice', ['rice', 'curd', 'mustard', 'urad dal', 'curry leaves', 'ginger', 'pomegranate'], ['rice', 'cooling']),
+      V('Lemon Rice', ['rice', 'lemon', 'turmeric', 'peanut', 'mustard', 'curry leaves', 'chana dal'], ['rice', 'quick']),
+      V('Tamarind Rice (Puliyodarai)', ['rice', 'tamarind', 'peanut', 'mustard', 'curry leaves', 'sesame', 'fenugreek'], ['rice']),
+      V('Tomato Rice', ['rice', 'tomato', 'onion', 'ginger garlic paste', 'mint', 'ghee'], ['rice', 'one-pot']),
+      V('Coconut Rice', ['rice', 'coconut', 'cashew', 'urad dal', 'chana dal', 'curry leaves'], ['rice', 'quick']),
+      V('Sambar with Poriyal Thali', ['rice', 'toor dal', 'seasonal vegetable', 'coconut', 'tamarind', 'rasam'], ['thali']),
+      V('Kara Kuzhambu', ['tamarind', 'onion', 'tomato', 'coconut', 'kuzhambu powder', 'gingelly oil'], ['curry']),
+      V('Mor Kuzhambu', ['curd', 'coconut', 'cumin', 'green chilli', 'turmeric', 'ash gourd'], ['curry', 'cooling']),
+      V('Kootu', ['chow chow', 'coconut', 'chana dal', 'mustard', 'cumin', 'curry leaves'], ['curry']),
+      V('Paruppu Rice (Dal Rice)', ['rice', 'toor dal', 'ghee', 'pepper', 'cumin', 'mustard'], ['rice', 'comfort']),
+      V('Beetroot Poriyal', ['beetroot', 'coconut', 'mustard', 'urad dal', 'curry leaves'], ['dry']),
+      V('Beans Paruppu Usili', ['french beans', 'toor dal', 'red chilli', 'curry leaves', 'coconut'], ['dry']),
+      E('Egg Curry', ['egg', 'onion', 'tomato', 'ginger garlic paste', 'turmeric', 'coriander powder'], ['curry']),
     ],
     dinner: [
-      { name: 'Chapati with Kurma', meal: 'dinner', cuisine: 'tamil-nadu', diet: 'veg', ingredients: ['wheat flour', 'vegetable', 'coconut milk', 'onion', 'tomato', 'spice'], tags: [], ref: '', notes: '' },
-      { name: 'Idli with Chutney', meal: 'dinner', cuisine: 'tamil-nadu', diet: 'veg', ingredients: ['rice', 'urad dal', 'salt', 'coconut', 'green chilli'], tags: [], ref: '', notes: '' },
-      { name: 'Dosa with Chutney', meal: 'dinner', cuisine: 'tamil-nadu', diet: 'veg', ingredients: ['rice', 'urad dal', 'coconut', 'green chilli'], tags: [], ref: '', notes: '' },
+      V('Chapati with Vegetable Kurma', ['wheat flour', 'mixed vegetable', 'coconut milk', 'onion', 'tomato', 'fennel'], ['roti']),
       { name: 'Ven Pongal', meal: 'dinner', cuisine: 'tamil-nadu', diet: 'veg', ingredients: ['rice', 'moong dal', 'ghee', 'pepper', 'cumin'], tags: [], ref: '', notes: '' },
       { name: 'Roti with Dal', meal: 'dinner', cuisine: 'tamil-nadu', diet: 'veg', ingredients: ['wheat flour', 'toor dal', 'tomato', 'onion', 'spice'], tags: [], ref: '', notes: '' },
       { name: 'Dinner Upma', meal: 'dinner', cuisine: 'tamil-nadu', diet: 'veg', ingredients: ['rava', 'onion', 'green chilli', 'mustard', 'curry leaves', 'oil'], tags: [], ref: '', notes: '' },
