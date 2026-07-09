@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="108" fill="#e2d6ba"/>
+  <!-- hearth stones -->
+  <ellipse cx="200" cy="390" rx="45" ry="22" fill="none" stroke="#23281f" stroke-width="12"/>
+  <ellipse cx="256" cy="400" rx="45" ry="22" fill="none" stroke="#23281f" stroke-width="12"/>
+  <ellipse cx="312" cy="390" rx="45" ry="22" fill="none" stroke="#23281f" stroke-width="12"/>
+  <!-- clay pot -->
+  <path d="M190 370 Q190 310 210 280 Q230 250 256 250 Q282 250 302 280 Q322 310 322 370 Z"
+        fill="none" stroke="#23281f" stroke-width="12" stroke-linejoin="round"/>
+  <!-- pot rim -->
+  <path d="M185 275 Q185 265 200 260 L312 260 Q327 265 327 275"
+        fill="none" stroke="#23281f" stroke-width="10" stroke-linecap="round"/>
+  <!-- flame center -->
+  <path d="M256 230 Q248 200 256 170 Q264 200 256 230Z" fill="#b5541c" stroke="#b5541c" stroke-width="4"/>
+  <!-- flame left -->
+  <path d="M236 235 Q225 210 235 185 Q245 210 236 235Z" fill="#b5541c" stroke="#b5541c" stroke-width="3" opacity="0.8"/>
+  <!-- flame right -->
+  <path d="M276 235 Q287 210 277 185 Q267 210 276 235Z" fill="#b5541c" stroke="#b5541c" stroke-width="3" opacity="0.8"/>
+</svg>
