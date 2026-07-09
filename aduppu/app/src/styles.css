@@ -657,5 +657,15 @@ input, textarea, button { font-family: inherit; }
 .cuisine-cards.settings { border-radius: var(--radius); overflow: hidden; border: 1px solid var(--line); }
 .cuisine-cards.settings .cuisine-row { border-radius: 0; }
 
+/* ---------- toast ---------- */
+.toast {
+  background: var(--ink); color: var(--bg);
+  padding: 12px 20px; border-radius: 12px;
+  font-size: 14px; font-weight: 600;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+  display: flex; align-items: center; gap: 8px;
+  white-space: nowrap;
+}
+
 /* ---------- a11y ---------- */
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }

@@ -3,73 +3,31 @@ import { localDateStr } from '../lib/dates.js';
 import { pickDish } from '../lib/randomizer.js';
 import { newItem } from '../lib/merge.js';
 
-/* ── constants ─────────────────────────────────────────── */
-
 const MEALS = ['breakfast', 'lunch', 'dinner'];
 const MEAL_LABELS = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner' };
+const MEAL_CLS = { breakfast: 'chip breakfast', lunch: 'chip lunch', dinner: 'chip dinner' };
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
-const ACCENT = '#b5541c';
-const ACCENT_LIGHT = '#f5ebe3';
-const BORDER = '#e5e0d8';
-const MUTED = '#999';
-const INK = '#333';
-
-const MEAL_CHIP_COLORS = {
-  breakfast: { bg: '#fef3c7', text: '#92400e' },
-  lunch:    { bg: ACCENT_LIGHT, text: ACCENT },
-  dinner:   { bg: '#e8e5e0', text: '#555' },
-};
-
-const INPUT_STYLE = {
-  padding: '8px 10px',
-  border: `1px solid ${BORDER}`,
-  borderRadius: 6,
-  fontSize: '0.875rem',
-  fontFamily: 'Inter, sans-serif',
-  outline: 'none',
-  boxSizing: 'border-box',
-};
-
-/* ── tiny sub-components ─────────────────────────────── */
-
 function DietDot({ diet }) {
   if (!diet) return null;
   if (diet === 'nonveg') {
     return (
-      <svg width="10" height="10" viewBox="0 0 10 10"
-        style={{ verticalAlign: 'middle', marginRight: 4, flexShrink: 0 }}>
+      <svg width="10" height="10" viewBox="0 0 10 10" className="diet-dot nonveg" aria-label="Non-veg">
         <polygon points="5,0.5 9.5,9.5 0.5,9.5" fill="#8B4513" />
       </svg>
     );
   }
-  const color = diet === 'egg' ? '#DAA520' : '#228B22';
   return (
-    <svg width="10" height="10" viewBox="0 0 10 10"
-      style={{ verticalAlign: 'middle', marginRight: 4, flexShrink: 0 }}>
-      <circle cx="5" cy="5" r="4.5" fill={color} />
+    <svg width="10" height="10" viewBox="0 0 10 10" className={'diet-dot ' + (diet === 'egg' ? 'egg' : 'veg')}
+      aria-label={diet === 'egg' ? 'Egg' : 'Veg'}>
+      <circle cx="5" cy="5" r="4.5" fill={diet === 'egg' ? '#DAA520' : '#228B22'} />
     </svg>
   );
 }
-
-function MealChip({ meal }) {
-  const c = MEAL_CHIP_COLORS[meal];
-  return (
-    <span style={{
-      display: 'inline-block', padding: '2px 10px', borderRadius: 10,
-      fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase',
-      letterSpacing: '0.04em', backgroundColor: c.bg, color: c.text,
-    }}>
-      {MEAL_LABELS[meal]}
-    </span>
-  );
-}
-
-/* ── main component ──────────────────────────────────── */
 
 export default function Today({
   items, dishes, plans, logs, groceryItems,
@@ -87,11 +45,9 @@ export default function Today({
   }, []);
 
   const today = localDateStr();
-
   const todayPlan = useMemo(() => plans.find(p => p.date === today), [plans, today]);
   const todayLogs = useMemo(() => logs.filter(l => l.date === today), [logs, today]);
 
-  // Format: "Thursday, 9 July"
   const dateDisplay = useMemo(() => {
     const d = new Date();
     return `${WEEKDAYS[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()]}`;
@@ -101,8 +57,6 @@ export default function Today({
     if (!name) return null;
     return dishes.find(d => d.name === name)?.diet || null;
   }, [dishes]);
-
-  /* ── toast ─────────────────────────────────────────── */
 
   const showToast = useCallback((msg, undoFn) => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -115,16 +69,10 @@ export default function Today({
     setToast(null);
   }, []);
 
-  /* ── handlers ──────────────────────────────────────── */
-
   const reroll = useCallback(async (meal) => {
     const name = pickDish(meal, today, {
-      dishes,
-      plans,
-      logs,
-      cuisines: todayPlan?.cuisine
-        ? [todayPlan.cuisine]
-        : (prefsItem?.cuisines || null),
+      dishes, plans, logs,
+      cuisines: todayPlan?.cuisine ? [todayPlan.cuisine] : (prefsItem?.cuisines || null),
       diet: prefsItem?.diet || 'all',
     });
     if (!name) return;
@@ -159,7 +107,8 @@ export default function Today({
     }));
     setComposer({ dish: '', mode: 'home', cost: '', note: '' });
     setExpandedMeal(null);
-  }, [composer, today, saveItem]);
+    showToast('Meal logged!');
+  }, [composer, today, saveItem, showToast]);
 
   const saveEdit = useCallback(async (original) => {
     await saveItem({
@@ -167,8 +116,7 @@ export default function Today({
       dish: editValues.dish ?? original.dish,
       mode: editValues.mode ?? original.mode,
       cost: (editValues.mode ?? original.mode) === 'out'
-        ? (Number(editValues.cost) || 0)
-        : (original.cost || 0),
+        ? (Number(editValues.cost) || 0) : (original.cost || 0),
       notes: editValues.notes ?? original.notes,
     });
     setEditingLogId(null);
@@ -184,8 +132,6 @@ export default function Today({
     }
   }, [expandedMeal]);
 
-  /* ── summary ───────────────────────────────────────── */
-
   const summary = useMemo(() => {
     if (todayLogs.length === 0) return null;
     const cooked = todayLogs.filter(l => l.mode === 'home').length;
@@ -194,28 +140,15 @@ export default function Today({
     return { cooked, ordered, spent };
   }, [todayLogs]);
 
-  /* ── render ────────────────────────────────────────── */
-
   return (
-    <div style={{ padding: 16, maxWidth: 640, margin: '0 auto' }}>
-
-      {/* ── Date heading ──────────────────────────── */}
-      <div style={{ marginBottom: 20 }}>
-        <div style={{
-          fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase',
-          letterSpacing: '0.1em', color: ACCENT, marginBottom: 2,
-        }}>
-          Today
-        </div>
-        <div style={{
-          fontSize: '1.5rem', fontWeight: 700, color: INK,
-          fontFamily: '"Saira Condensed", sans-serif',
-        }}>
-          {dateDisplay}
-        </div>
+    <main className="screen">
+      {/* Date heading */}
+      <span className="eyebrow">Today</span>
+      <div className="disp" style={{ fontSize: 24, fontWeight: 700, marginBottom: 16 }}>
+        {dateDisplay}
       </div>
 
-      {/* ── Meal cards ────────────────────────────── */}
+      {/* Meal cards */}
       {MEALS.map(meal => {
         const planned = todayPlan?.meals?.[meal] || '';
         const mealLogs = todayLogs.filter(l => l.meal === meal);
@@ -223,286 +156,132 @@ export default function Today({
         const diet = getDiet(planned);
 
         return (
-          <div key={meal} style={{
-            backgroundColor: '#fff', border: `1px solid ${BORDER}`,
-            borderRadius: 10, padding: 16, marginBottom: 12,
-          }}>
-            {/* Header row */}
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8,
-            }}>
-              <MealChip meal={meal} />
+          <div key={meal} className="card" style={{ marginBottom: 12 }}>
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <span className={MEAL_CLS[meal]}>{MEAL_LABELS[meal]}</span>
               {planned && <DietDot diet={diet} />}
-              <span style={{
-                flex: 1, fontSize: '1rem', fontWeight: 500,
-                color: planned ? INK : MUTED,
-              }}>
+              <span style={{ flex: 1, fontSize: 15, fontWeight: planned ? 600 : 400, color: planned ? 'var(--ink)' : 'var(--muted)' }}>
                 {planned || 'Nothing planned'}
               </span>
-              <button
-                onClick={() => reroll(meal)}
-                title="Reroll"
-                style={{
-                  border: 'none', background: 'none', cursor: 'pointer',
-                  fontSize: '1.1rem', padding: '4px 6px', borderRadius: 6,
-                }}
-              >
-                🎲
-              </button>
+              <button className="btn" style={{ padding: '6px 10px', fontSize: 16, minHeight: 0, border: 'none', background: 'none' }}
+                onClick={() => reroll(meal)} title="Reroll">🎲</button>
             </div>
 
-            {/* "Cooked this" button */}
+            {/* "Cooked this" quick button */}
             {planned && !hasLog && (
-              <button
-                onClick={() => cookedThis(meal, planned)}
-                style={{
-                  display: 'block', width: '100%', padding: '8px 0',
-                  border: `1px solid ${ACCENT}`, borderRadius: 8,
-                  backgroundColor: ACCENT_LIGHT, color: ACCENT,
-                  fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer',
-                  marginBottom: 8,
-                }}
-              >
+              <button className="btn accent" style={{ width: '100%', marginBottom: 10 }}
+                onClick={() => cookedThis(meal, planned)}>
                 Cooked this ✓
               </button>
             )}
 
             {/* Logged entries */}
             {mealLogs.map(log => (
-              <div key={log.id} style={{ marginBottom: 4 }}>
+              <div key={log.id} style={{ marginBottom: 6 }}>
                 {editingLogId === log.id ? (
-                  /* ── inline edit ── */
-                  <div style={{
-                    display: 'flex', flexDirection: 'column', gap: 6,
-                    padding: 8, backgroundColor: '#fafaf8', borderRadius: 6,
-                    border: `1px solid ${BORDER}`,
-                  }}>
-                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                      <input
-                        value={editValues.dish ?? ''}
-                        onChange={e => setEditValues(v => ({ ...v, dish: e.target.value }))}
-                        style={{ ...INPUT_STYLE, flex: 1 }}
-                      />
-                      <button
-                        onClick={() => setEditValues(v => ({
-                          ...v,
-                          mode: (v.mode ?? log.mode) === 'home' ? 'out' : 'home',
-                        }))}
-                        style={{
-                          border: `1px solid ${BORDER}`, borderRadius: 6,
-                          padding: '6px 10px', backgroundColor: '#fff',
-                          cursor: 'pointer', fontSize: '0.9rem',
-                        }}
-                      >
-                        {(editValues.mode ?? log.mode) === 'home' ? '🏠' : '🛵'}
+                  <div className="card" style={{ padding: 10, background: 'var(--bg)' }}>
+                    <input className="search" style={{ marginBottom: 6 }}
+                      value={editValues.dish ?? ''} placeholder="Dish name"
+                      onChange={e => setEditValues(v => ({ ...v, dish: e.target.value }))} />
+                    <div className="seg" style={{ marginBottom: 6 }}>
+                      <button className={(editValues.mode ?? log.mode) === 'home' ? 'on' : ''}
+                        onClick={() => setEditValues(v => ({ ...v, mode: 'home' }))}>
+                        🏠 Home cooked
+                      </button>
+                      <button className={(editValues.mode ?? log.mode) === 'out' ? 'on' : ''}
+                        onClick={() => setEditValues(v => ({ ...v, mode: 'out' }))}>
+                        🛵 Ordered out
                       </button>
                     </div>
                     {(editValues.mode ?? log.mode) === 'out' && (
-                      <input
-                        type="number"
-                        placeholder="₹ cost"
-                        value={editValues.cost ?? ''}
-                        onChange={e => setEditValues(v => ({ ...v, cost: e.target.value }))}
-                        style={INPUT_STYLE}
-                      />
+                      <input type="number" placeholder="₹ cost" style={{ marginBottom: 6, width: '100%', padding: '8px 10px', border: '1px solid var(--line)', borderRadius: 8, background: 'var(--card)', color: 'var(--ink)', fontSize: 14 }}
+                        value={editValues.cost ?? ''} onChange={e => setEditValues(v => ({ ...v, cost: e.target.value }))} />
                     )}
-                    <input
-                      placeholder="Note"
-                      value={editValues.notes ?? ''}
-                      onChange={e => setEditValues(v => ({ ...v, notes: e.target.value }))}
-                      style={INPUT_STYLE}
-                    />
-                    <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                      <button
-                        onClick={() => { setEditingLogId(null); setEditValues({}); }}
-                        style={{
-                          padding: '6px 12px', border: `1px solid ${BORDER}`,
-                          borderRadius: 6, backgroundColor: '#fff',
-                          cursor: 'pointer', fontSize: '0.8rem',
-                        }}
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={() => saveEdit(log)}
-                        style={{
-                          padding: '6px 12px', border: 'none', borderRadius: 6,
-                          backgroundColor: ACCENT, color: '#fff',
-                          cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600,
-                        }}
-                      >
-                        Save
-                      </button>
+                    <input placeholder="Note (optional)" style={{ marginBottom: 8, width: '100%', padding: '8px 10px', border: '1px solid var(--line)', borderRadius: 8, background: 'var(--card)', color: 'var(--ink)', fontSize: 14 }}
+                      value={editValues.notes ?? ''} onChange={e => setEditValues(v => ({ ...v, notes: e.target.value }))} />
+                    <div className="btn-row">
+                      <button className="btn" onClick={() => { setEditingLogId(null); setEditValues({}); }}>Cancel</button>
+                      <button className="btn accent" onClick={() => saveEdit(log)}>Save</button>
                     </div>
                   </div>
                 ) : (
-                  /* ── display row ── */
-                  <div
-                    onClick={() => {
-                      setEditingLogId(log.id);
-                      setEditValues({
-                        dish: log.dish, mode: log.mode,
-                        cost: log.cost || '', notes: log.notes || '',
-                      });
-                    }}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 6,
-                      padding: '6px 8px', borderRadius: 6,
-                      cursor: 'pointer', backgroundColor: '#fafaf8',
-                    }}
-                  >
-                    <span style={{ fontSize: '0.85rem' }}>
-                      {log.mode === 'home' ? '🏠' : '🛵'}
+                  <div onClick={() => { setEditingLogId(log.id); setEditValues({ dish: log.dish, mode: log.mode, cost: log.cost || '', notes: log.notes || '' }); }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 'var(--radius)', background: 'var(--bg)', cursor: 'pointer' }}>
+                    <span className={'chip ' + (log.mode === 'home' ? 'plain' : 'grain')} style={{ fontSize: 11 }}>
+                      {log.mode === 'home' ? '🏠 Home' : '🛵 Order'}
                     </span>
                     <DietDot diet={getDiet(log.dish)} />
-                    <span style={{ flex: 1, fontSize: '0.875rem', color: INK }}>
-                      {log.dish}
-                    </span>
-                    {log.cost > 0 && (
-                      <span style={{ fontSize: '0.8rem', color: MUTED }}>
-                        ₹{log.cost}
-                      </span>
-                    )}
-                    {log.notes ? (
-                      <span style={{
-                        fontSize: '0.75rem', color: MUTED, fontStyle: 'italic',
-                        maxWidth: 80, overflow: 'hidden',
-                        textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                      }}>
-                        {log.notes}
-                      </span>
-                    ) : null}
-                    <button
-                      onClick={e => { e.stopPropagation(); deleteWithUndo(log); }}
-                      style={{
-                        border: 'none', background: 'none', cursor: 'pointer',
-                        fontSize: '0.75rem', color: MUTED, padding: '4px',
-                      }}
-                      title="Delete"
-                    >
-                      ✕
-                    </button>
+                    <span style={{ flex: 1, fontSize: 14, fontWeight: 500 }}>{log.dish}</span>
+                    {log.cost > 0 && <span style={{ fontSize: 13, color: 'var(--muted)' }}>₹{log.cost}</span>}
+                    <button onClick={e => { e.stopPropagation(); deleteWithUndo(log); }}
+                      className="search-x" title="Delete">✕</button>
                   </div>
                 )}
               </div>
             ))}
 
-            {/* Inline log composer */}
-            <div style={{ marginTop: 6 }}>
-              {expandedMeal === meal ? (
-                <div style={{
-                  display: 'flex', flexDirection: 'column', gap: 6,
-                  padding: 8, backgroundColor: '#fafaf8', borderRadius: 6,
-                  border: `1px dashed ${BORDER}`,
-                }}>
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                    <input
-                      autoFocus
-                      placeholder="What did you have?"
-                      value={composer.dish}
-                      onChange={e => setComposer(c => ({ ...c, dish: e.target.value }))}
-                      onKeyDown={e => { if (e.key === 'Enter') submitComposer(meal); }}
-                      style={{ ...INPUT_STYLE, flex: 1 }}
-                    />
-                    <button
-                      onClick={() => setComposer(c => ({
-                        ...c, mode: c.mode === 'home' ? 'out' : 'home',
-                      }))}
-                      title={composer.mode === 'home' ? 'Home' : 'Ordered'}
-                      style={{
-                        border: `1px solid ${BORDER}`, borderRadius: 6,
-                        padding: '8px 10px', cursor: 'pointer', fontSize: '0.9rem',
-                        backgroundColor: composer.mode === 'out' ? '#fef3c7' : '#fff',
-                      }}
-                    >
-                      {composer.mode === 'home' ? '🏠' : '🛵'}
-                    </button>
-                  </div>
-                  {composer.mode === 'out' && (
-                    <input
-                      type="number"
-                      placeholder="₹ cost"
-                      value={composer.cost}
-                      onChange={e => setComposer(c => ({ ...c, cost: e.target.value }))}
-                      onKeyDown={e => { if (e.key === 'Enter') submitComposer(meal); }}
-                      style={INPUT_STYLE}
-                    />
-                  )}
-                  <input
-                    placeholder="Note (optional)"
-                    value={composer.note}
-                    onChange={e => setComposer(c => ({ ...c, note: e.target.value }))}
-                    onKeyDown={e => { if (e.key === 'Enter') submitComposer(meal); }}
-                    style={INPUT_STYLE}
-                  />
+            {/* Log composer */}
+            {expandedMeal === meal ? (
+              <div style={{ marginTop: 8, padding: 12, borderRadius: 'var(--radius)', border: '1px dashed var(--line)', background: 'var(--bg)' }}>
+                <input autoFocus placeholder="What did you have?" value={composer.dish}
+                  onChange={e => setComposer(c => ({ ...c, dish: e.target.value }))}
+                  style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--line)', borderRadius: 8, background: 'var(--card)', color: 'var(--ink)', fontSize: 15, marginBottom: 8 }} />
+                <div className="seg" style={{ marginBottom: 8 }}>
+                  <button className={composer.mode === 'home' ? 'on' : ''}
+                    onClick={() => setComposer(c => ({ ...c, mode: 'home' }))}>
+                    🏠 Home cooked
+                  </button>
+                  <button className={composer.mode === 'out' ? 'on' : ''}
+                    onClick={() => setComposer(c => ({ ...c, mode: 'out' }))}>
+                    🛵 Ordered out
+                  </button>
                 </div>
-              ) : (
-                <button
-                  onClick={() => toggleComposer(meal)}
-                  style={{
-                    display: 'block', width: '100%', padding: '8px 0',
-                    border: `1px dashed ${BORDER}`, borderRadius: 8,
-                    backgroundColor: 'transparent', color: MUTED,
-                    fontSize: '0.8rem', cursor: 'pointer',
-                  }}
-                >
-                  + Log a meal
-                </button>
-              )}
-            </div>
+                {composer.mode === 'out' && (
+                  <input type="number" placeholder="₹ Amount spent" value={composer.cost}
+                    onChange={e => setComposer(c => ({ ...c, cost: e.target.value }))}
+                    style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--line)', borderRadius: 8, background: 'var(--card)', color: 'var(--ink)', fontSize: 14, marginBottom: 8 }} />
+                )}
+                <input placeholder="Note (optional)" value={composer.note}
+                  onChange={e => setComposer(c => ({ ...c, note: e.target.value }))}
+                  style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--line)', borderRadius: 8, background: 'var(--card)', color: 'var(--ink)', fontSize: 14, marginBottom: 10 }} />
+                <div className="btn-row">
+                  <button className="btn" onClick={() => setExpandedMeal(null)}>Cancel</button>
+                  <button className="btn accent" disabled={!composer.dish.trim()} onClick={() => submitComposer(meal)}>
+                    Log meal
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button className="add-task" onClick={() => toggleComposer(meal)}>
+                <span className="plus">+</span> Log a meal
+              </button>
+            )}
           </div>
         );
       })}
 
-      {/* ── Summary strip ─────────────────────────── */}
+      {/* Summary */}
       {summary && (
-        <div style={{
-          display: 'flex', justifyContent: 'center', gap: 12,
-          padding: '12px 16px', backgroundColor: '#fff',
-          border: `1px solid ${BORDER}`, borderRadius: 10,
-          fontSize: '0.8rem', color: MUTED,
-        }}>
-          <span>cooked <strong style={{ color: INK }}>{summary.cooked}</strong></span>
-          {summary.ordered > 0 && (
-            <>
-              <span style={{ color: BORDER }}>·</span>
-              <span>ordered <strong style={{ color: INK }}>{summary.ordered}</strong></span>
-            </>
-          )}
-          {summary.spent > 0 && (
-            <>
-              <span style={{ color: BORDER }}>·</span>
-              <span>₹ <strong style={{ color: INK }}>{summary.spent}</strong> spent</span>
-            </>
-          )}
+        <div className="card" style={{ display: 'flex', justifyContent: 'center', gap: 16, fontSize: 13, color: 'var(--muted)' }}>
+          <span>🏠 <strong style={{ color: 'var(--ink)' }}>{summary.cooked}</strong> cooked</span>
+          {summary.ordered > 0 && <span>🛵 <strong style={{ color: 'var(--ink)' }}>{summary.ordered}</strong> ordered</span>}
+          {summary.spent > 0 && <span>₹ <strong style={{ color: 'var(--ink)' }}>{summary.spent}</strong> spent</span>}
         </div>
       )}
 
-      {/* ── Toast ─────────────────────────────────── */}
+      {/* Toast */}
       {toast && (
-        <div style={{
-          position: 'fixed', bottom: 80, left: '50%',
-          transform: 'translateX(-50%)',
-          backgroundColor: INK, color: '#fff',
-          padding: '10px 20px', borderRadius: 10, fontSize: '0.875rem',
-          display: 'flex', alignItems: 'center', gap: 12,
-          zIndex: 1000, boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-        }}>
+        <div className="toast" style={{ position: 'fixed', bottom: 90, left: '50%', transform: 'translateX(-50%)', zIndex: 1000 }}>
           <span>{toast.msg}</span>
           {toast.undoFn && (
-            <button
-              onClick={() => { toast.undoFn(); dismissToast(); }}
-              style={{
-                border: 'none', background: 'none', color: '#fbbf24',
-                cursor: 'pointer', fontWeight: 600, fontSize: '0.875rem',
-                padding: 0,
-              }}
-            >
+            <button onClick={() => { toast.undoFn(); dismissToast(); }}
+              style={{ border: 'none', background: 'none', color: 'var(--gold)', cursor: 'pointer', fontWeight: 700, marginLeft: 12 }}>
               Undo
             </button>
           )}
         </div>
       )}
-    </div>
+    </main>
   );
 }
