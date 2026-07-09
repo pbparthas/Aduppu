@@ -13,7 +13,7 @@ export function normalize(s) {
     .trim()
     .replace(/\s+/g, ' ')
     .split(' ')
-    .map((w) => w.replace(/s$/, ''))
+    .map((w) => w.replace(/e?s$/, ''))
     .join(' ');
 }
 
