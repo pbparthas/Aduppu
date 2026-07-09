@@ -2,7 +2,7 @@ name: Deploy Aduppu to GitHub Pages
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'claude/meal-planner-review-8yy67r']
     paths: ['aduppu/**', '.github/workflows/deploy-pages.yml']
   workflow_dispatch:
 
