@@ -1,254 +1,774 @@
-# Aduppu v2 — Full PWA Redesign Plan
+# Aduppu v3 — Implementation Plan (Nisaba-pattern rebuild)
 
-## Context
-
-Aduppu is a single-file (839-line) meal planning PWA currently stored as `aduppu.html`. It uses localStorage, blob-based manifest/service worker, and has a functional but dated UI. The user wants to:
-
-1. **Convert to a proper PWA** hosted on GitHub Pages
-2. **Persist data beyond browser wipes** (localStorage alone won't survive)
-3. **Add a Recipes section** with ingredients, name, reference, tags, and meal planner integration
-4. **Add sign-in** so data can be tied to a user
-5. **Significantly improve UI/UX** based on modern meal planner app patterns
-
----
-
-## Architecture Decision: Firebase (Free Tier)
-
-**Why Firebase?** Simplest path for a static GitHub Pages PWA with auth + cloud persistence:
-- **Firebase Auth**: Google Sign-In (one tap), no backend needed, free for 50K MAUs
-- **Firestore**: Cloud database with offline support built-in, free tier (50K reads/20K writes/day)
-- **No server needed**: Everything runs client-side, perfect for GitHub Pages
-
-**Data flow:**
-1. User signs in with Google via Firebase Auth
-2. Data stored in Firestore (cloud) + cached locally by Firestore SDK (offline support)
-3. Survives browser wipes — data lives in Firestore, re-syncs on next sign-in
-4. Export/Import JSON as manual backup option
+> Supersedes the v2 Firebase plan (see git history of this file). Decided with the
+> owner on 2026-07-09: rebuild Aduppu on the **Nisaba architecture** — React + Vite
+> PWA on GitHub Pages at `aduppu.orionforge.dev`, a Cloudflare Worker auth broker,
+> and **the owner's own Google Drive as storage** (per-item JSON files, offline-first
+> IndexedDB replica, background sync). No Firebase, no server that sees data.
+>
+> This document is the complete spec for the implementing agent. The reference
+> implementation is the owner's Nisaba repo — clone `pbparthas/Nisaba` and port
+> from `nisaba/` as directed below. Where this plan and Nisaba's code disagree,
+> this plan wins.
 
 ---
 
-## File Structure (New)
+## 0. Ground rules
+
+- **Branch**: develop on `claude/meal-planner-review-8yy67r` in `pbparthas/Aduppu`, push there.
+- **FIRST TASK — remove the stale v2 implementation.** Commit `eb2521d`
+  ("Implement Aduppu v2: full PWA redesign with Firebase…") on this branch
+  was produced by an old session against the superseded Firebase plan and
+  contradicts this document. Before anything else, `git revert eb2521d`
+  (keeps it recoverable in history), which removes `index.html`, `css/`,
+  `js/`, and restores `sw.js`. None of its code is to be reused — this plan's
+  architecture (Nisaba pattern, no Firebase) replaces it entirely.
+- **Reference**: `git clone --depth 1 https://github.com/pbparthas/nisaba` and port
+  from `nisaba/app`, `nisaba/worker`, `nisaba/docs`, `.github/workflows/deploy-pages.yml`.
+- Plain JavaScript (no TypeScript), ESM, React 19 function components — matching Nisaba.
+- Keep ported files as close to Nisaba's originals as possible (same structure,
+  same comments-style) so fixes can flow between the two apps. Deviations only
+  where this plan says so.
+- v1 (`aduppu.html`) stays in the repo root untouched as reference until v3 ships.
+
+## 1. What Aduppu is
+
+A personal Indian meal planner: plan the week's breakfast/lunch/dinner, log
+what was actually eaten (home-cooked vs ordered, with ₹ cost), keep a dish
+catalog with ingredients + optional recipe details, suggest what to cook from
+what's in the kitchen, and track home-vs-out stats and grocery spend.
+**Cuisine and diet are first-class dimensions** (owner requirements,
+2026-07-09): every dish belongs to a regional Indian cuisine — a two-level
+taxonomy where the southern states split out (Tamil Nadu, Kerala, Karnataka,
+Andhra, Telangana, Goan) and Tamil Nadu / Kerala / Karnataka have
+sub-regional cuisines (Chettinad, Malabar, Udupi–Mangalore, …). Every dish is
+also marked veg / egg / non-veg. The user picks a **diet preference** and
+**favorite cuisines** at first run, can change both in Settings, and is asked
+which cuisine to plan for when filling a day/week. Diet is a hard constraint
+everywhere — a vegetarian user must never be suggested a non-veg dish.
+Currency ₹, dates in local time (IST in practice), en-IN formatting.
+
+**Usage assumption (owner-confirmed):** one user, one primary mobile device per
+login. Drive sync exists for durability (phone loss/wipe, future device
+migration), not for concurrent multi-device editing. Consequence: the simple
+merge choices below (newer-wins for every type, whole-list pantry singleton)
+are deliberate and final for v1 — do NOT add conflict copies, field-level
+merging, or CRDT-style pantry merging.
+
+## 2. Repository layout (target)
 
 ```
 Aduppu/
-├── index.html          # Main app (replaces aduppu.html)
-├── manifest.json       # PWA manifest (already created)
-├── sw.js               # Service worker (already created)
-├── icons/
-│   ├── icon-192.svg    # App icon (already created)
-│   └── icon-512.svg    # App icon (already created)
-├── css/
-│   └── style.css       # All styles extracted + new design
-├── js/
-│   ├── app.js          # Main app logic, tab switching, init
-│   ├── firebase.js     # Firebase config, auth, Firestore sync
-│   ├── data.js         # Data layer (CRUD operations, defaults, smart randomizer)
-│   ├── today.js        # Today tab logic
-│   ├── planner.js      # Plan tab logic (with smart repeat-avoidance randomizer)
-│   ├── suggest.js      # Suggest tab logic
-│   ├── recipes.js      # Merged Recipes+Dishes tab logic
-│   ├── track.js        # Track tab logic + export/import
-│   └── backup.js       # Export/Import JSON logic
-└── aduppu.html         # Keep original as reference (can remove later)
+├── aduppu/
+│   ├── app/                    # React 19 + Vite PWA
+│   │   ├── index.html
+│   │   ├── vite.config.js
+│   │   ├── package.json
+│   │   ├── public/
+│   │   │   ├── icon.svg
+│   │   │   ├── pwa-192.png  pwa-512.png  pwa-512-maskable.png
+│   │   │   ├── manifest.webmanifest
+│   │   │   └── CNAME               # "aduppu.orionforge.dev"
+│   │   ├── src/
+│   │   │   ├── main.jsx
+│   │   │   ├── App.jsx             # shell: header, tabs, sign-in gate, settings
+│   │   │   ├── styles.css          # ported design system, terracotta accent
+│   │   │   ├── tabs/
+│   │   │   │   ├── Today.jsx
+│   │   │   │   ├── Plan.jsx
+│   │   │   │   ├── Cook.jsx
+│   │   │   │   └── Track.jsx
+│   │   │   └── lib/
+│   │   │       ├── auth.js         # ported (Worker + GIS modes; no desktop mode)
+│   │   │       ├── drive.js        # ported (folder "Aduppu")
+│   │   │       ├── sync.js         # ported verbatim
+│   │   │       ├── merge.js        # simplified: LWW for all types
+│   │   │       ├── store-idb.js    # ported (db name "aduppu")
+│   │   │       ├── store-memory.js # ported (tests)
+│   │   │       ├── theme.js        # ported (keys "ad:*", terracotta theme-colors)
+│   │   │       ├── pwaInstall.js   # ported verbatim
+│   │   │       ├── dates.js        # NEW — local-date helpers (IST-safe)
+│   │   │       ├── model.js        # NEW — item shapes, defaults seed, backup
+│   │   │       ├── randomizer.js   # NEW — repeat-avoiding meal picker
+│   │   │       └── kitchen.js      # NEW — pantry matching for "From my kitchen"
+│   │   └── test/
+│   │       ├── mock-drive.js       # ported verbatim
+│   │       ├── sync.test.js        # ported, item shapes adapted
+│   │       ├── merge.test.js       # rewritten for LWW
+│   │       ├── randomizer.test.js  # NEW
+│   │       ├── kitchen.test.js     # NEW
+│   │       └── dates.test.js       # NEW
+│   ├── worker/                 # Cloudflare Worker auth broker
+│   │   ├── src/index.js        # ported; cookie "ad_session"
+│   │   ├── wrangler.toml       # name "aduppu-auth"
+│   │   ├── package.json
+│   │   └── README.md
+│   └── docs/
+│       └── GOOGLE_SETUP.md     # adapted from Nisaba's
+├── .github/workflows/deploy-pages.yml
+├── README.md                   # rewritten for v3
+├── PLAN.md                     # this file
+├── aduppu.html                 # v1, kept as reference
+└── LICENSE
 ```
 
----
+Delete `manifest.json`, `sw.js`, `icons/` from the repo root once `aduppu/app`
+exists (they were half-wired v2 groundwork; vite-plugin-pwa replaces them).
 
-## UI/UX Redesign
+## 3. Infrastructure config (differences from Nisaba)
 
-### Design System Changes
+| Setting | Nisaba | Aduppu |
+|---|---|---|
+| App URL | nisaba.orionforge.dev | **aduppu.orionforge.dev** |
+| Worker name | nisaba-auth | **aduppu-auth** |
+| Worker URL | auth.orionforge.dev | **aduppu-auth.orionforge.dev** |
+| Session cookie | `ns_session` | **`ad_session`** |
+| COOKIE_DOMAIN | orionforge.dev | orionforge.dev (same) |
+| ALLOWED_ORIGINS | nisaba origin + localhost:5173 | `https://aduppu.orionforge.dev,http://localhost:5173` |
+| OAuth client | Nisaba's own | **new, separate client** (drive.file visibility is per-client; sharing would let each app see the other's files) |
+| Drive folder | `Nisaba/` | **`Aduppu/`** (`items/` subfolder; `attachments/` created but unused in v1) |
+| IndexedDB name | `nisaba` | **`aduppu`** |
+| localStorage keys | `ns_*` / `ns:*` | **`ad_*` / `ad:*`** |
+| AUTH_WORKER_DEFAULT (auth.js) | https://auth.orionforge.dev | **https://aduppu-auth.orionforge.dev** |
+| DEFAULT_CLIENT_ID (App.jsx) | baked-in Nisaba id | leave placeholder `''` → app shows the SetupScreen (paste client id) until the owner creates one; bake it in afterwards |
 
-| Element | Current | New |
-|---------|---------|-----|
-| Font | Crimson Text (serif) | Inter (sans-serif) via Google Fonts — modern, clean, readable |
-| Primary color | #b5541c (terracotta) | Keep — it's warm and food-appropriate |
-| Cards | Flat with subtle shadow | Slightly elevated, rounded (16px), subtle hover lift |
-| Buttons | Flat orange | Soft gradient with hover feedback, 44px min touch target |
-| Animations | None | Fade-in on tab switch, smooth transitions on cards |
-| Empty states | Minimal text | Helpful messaging with call-to-action |
-| Icons | Emoji only | Emoji + text labels always visible (bottom nav) |
+`wrangler.toml` keeps the KV id as `REPLACE_WITH_KV_NAMESPACE_ID` and a comment
+with the create command, exactly like Nisaba's.
 
-### Navigation (5 tabs — merged Recipes+Dishes)
+## 4. Data model
 
-**Bottom nav (mobile) + Header tabs (desktop):**
-1. 🌤 **Today** — What's cooking today
-2. 📅 **Plan** — Weekly meal planner (smart randomizer with repeat avoidance)
-3. 🍳 **Recipes** — Merged tab: full recipes + quick dishes toggle
-4. 🥘 **Suggest** — Cook from what you have
-5. 📊 **Track** — Stats, spending, logs, export/import
+Every item is one JSON file `Aduppu/items/<id>.json` in Drive, one row in the
+IDB `items` store. Common envelope (see Nisaba `merge.js#newItem`):
 
-### Tab-by-Tab Redesign
+```js
+{ schema: 1, id, type, deleted: false, deleted_at: null,
+  created_at, updated_at }           // + local-only `dirty: 0|1`
+```
 
-#### Sign-In Screen (New — shown before app loads)
-- Clean centered card with app logo + tagline
-- "Sign in with Google" button (Firebase Auth)
-- "Continue without sign-in" option (uses localStorage only, with warning about data loss)
-- After sign-in, data syncs from Firestore; first-time users get defaults loaded
+Types:
 
-#### 1. Today Tab (Improved)
-- **Date header** with day name, large and prominent
-- **Meal cards** (breakfast/lunch/dinner) as expandable panels:
-  - Shows planned dish name + meal type pill
-  - Expand to see: logged meal, quick "Log Now" inline button
-  - "Log Now" opens inline form (no scrolling to separate form)
-- **Quick log form** still available below for manual entry
-  - **Autocomplete** from dishes database as user types
-  - Edit/delete logged meals
-- **Daily summary** card at bottom (cooked count, order count, spend)
+```js
+// Dish — catalog entry; recipe fields are optional extras on the SAME type.
+{ type: 'dish', name: 'Kara Kuzhambu', meal: 'breakfast'|'lunch'|'dinner',
+  cuisine: 'tamil-nadu',                    // any key from CUISINES (§4.1) — region
+                                            // OR sub-cuisine key; 'other' allowed
+  diet: 'veg',                              // 'veg' | 'egg' | 'nonveg' (FSSAI trio)
+  ingredients: ['tamarind','onion', ...],   // normalized lowercase strings
+  tags: ['spicy','one-pot'], ref: '',       // source: book / URL / "Paati"
+  notes: '' }                               // free-text prep notes
 
-#### 2. Plan Tab (Improved)
-- **Default to day view on mobile**, grid on desktop
-- **Grid view**: Dim past days, highlight today with accent border
-- **Day view**: Larger meal cards with dish name + first 3 ingredients preview
-- **Randomize** with confirmation toast (not modal — keep it quick)
-- **"Add from Recipes"** button on each meal slot — opens recipe picker modal
+// Prefs — synced singleton (deterministic id), same pattern as pantry.
+{ id: 'prefs', type: 'prefs',
+  diet: 'veg' | 'veg-egg' | 'all',          // asked explicitly at onboarding
+  cuisines: ['tamil-nadu','kerala:malabar'] } // ≥1; region keys select the whole
+                                              // region, 'region:sub' keys select
+                                              // one sub-cuisine only
 
-**Smart Randomizer (repeat avoidance):**
-- Lunch dishes: no repeat within **10 days** (checks plan history + track log)
-- Dinner dishes: no repeat within **3 days**
-- Breakfast: no repeat within **2 days** (lighter constraint since breakfast options are fewer)
-- Algorithm: filter dish pool to exclude recently used, then pick random from remaining. If pool is exhausted (too few dishes), relax the constraint and pick least-recently-used.
-- Tracks usage in `aduppu_dish_history` — `{ dishName: lastUsedDate }` per meal type
+// Plan — ONE PER CALENDAR DAY, deterministic id so devices converge.
+{ id: 'plan-2026-07-09', type: 'plan', date: '2026-07-09',
+  cuisine: null,                            // set when the day was filled for a chosen
+                                            // cuisine; guides per-slot rerolls
+  meals: { breakfast: 'Idli', lunch: '', dinner: '' } }  // dish names, '' = unset
 
-#### 3. Recipes Tab (NEW — merged with Dishes)
+// Log — what was actually eaten.
+{ type: 'log', date: '2026-07-09', meal: 'breakfast',
+  mode: 'home'|'out', dish: 'Idli with sambar', cost: 0, notes: '' }
 
-**Two sub-views via toggle:**
+// Grocery spend entry.
+{ type: 'grocery', date: '2026-07-09', amount: 450, note: 'weekly vegetables' }
+```
 
-**"Dishes" view (default)** — Quick lightweight list for the randomizer:
-- Name + meal type + ingredients (same as current Dishes tab)
-- Add/edit/delete with search bar
-- This is what the planner randomizer pulls from
-- **Confirmation dialog** before delete
+Decisions:
+- Plans reference dishes **by name** (strings), not id — survives dish deletion,
+  allows free-text meals, matches v1 behavior.
+- `plan-<date>` ids are the ONLY deterministic ids; everything else uses
+  `crypto.randomUUID()`.
+- **Merge policy: newer-wins (LWW) for every type. No conflict copies.**
+  `merge.js` keeps `resolveItem(remote, local)` with the same signature but the
+  conflict-copy branch is removed (a meal-slot race doesn't merit duplicates).
+- **Pantry** (ingredients on hand) is device-synced app state, not a per-item
+  file: store as a singleton item `{ id: 'pantry', type: 'pantry',
+  items: ['rice','toor dal',...] }` so it syncs like everything else.
 
-**"Recipes" view** — Detailed recipe cards:
-- Recipe name (large, bold)
-- Reference name (source — cookbook, URL, family name, etc.)
-- Tags as colored pills (e.g., "Quick", "Spicy", "Weekend", "Festival", "One-pot")
-- Meal type (breakfast/lunch/dinner/any)
-- Ingredients list (comma-separated, expandable)
-- Optional: prep notes / instructions (textarea)
-- **"Add to Planner"** button → opens day/meal picker
-- **"Add as Dish"** button → copies name+meal+ingredients to the quick dishes list
+### 4.1 Cuisines (canonical two-level taxonomy)
 
-**Add form** adapts to current view (simple for dishes, full for recipes)
-**Search/filter bar**: Filter by name, tag, or ingredient across both views
-**Storage**: `aduppu_dishes` (for randomizer) + `aduppu_recipes` (detailed) in localStorage / Firestore
+There is no single "South Indian" cuisine — the southern states are top-level
+regions, and Tamil Nadu / Kerala / Karnataka carry sub-regional cuisines.
+`model.js` exports the data-driven tree — adding a region or sub later is one
+entry plus its seed dishes:
 
-#### 4. Suggest Tab (Improved)
-- **Ingredient input** with autocomplete from all known ingredients
-- **Real-time filtering** as user types (debounced)
-- **Results** show "Add to Plan" button on each suggested dish
-- **Ingredient pills** with X to remove (instead of re-editing text)
+```js
+CUISINES = [
+  { key: 'tamil-nadu', label: 'Tamil Nadu', subs: [
+      { key: 'tamil-nadu:chettinad', label: 'Chettinad' },
+      { key: 'tamil-nadu:kongunad',  label: 'Kongunad' },
+      { key: 'tamil-nadu:madurai',   label: 'Madurai' },
+      { key: 'tamil-nadu:thanjavur', label: 'Thanjavur / Delta' },
+  ]},
+  { key: 'kerala', label: 'Kerala', subs: [
+      { key: 'kerala:malabar',    label: 'Malabar' },
+      { key: 'kerala:travancore', label: 'Travancore' },
+      { key: 'kerala:central',    label: 'Central Kerala / Kochi' },
+      { key: 'kerala:palakkad',   label: 'Palakkad' },
+  ]},
+  { key: 'karnataka', label: 'Karnataka', subs: [
+      { key: 'karnataka:udupi-mangalore', label: 'Udupi–Mangalore' },
+      { key: 'karnataka:north',           label: 'North Karnataka' },
+      { key: 'karnataka:malnad',          label: 'Malnad' },
+      { key: 'karnataka:kodava',          label: 'Kodava / Coorg' },
+  ]},
+  { key: 'andhra',    label: 'Andhra' },
+  { key: 'telangana', label: 'Telangana', subs: [
+      { key: 'telangana:hyderabadi', label: 'Hyderabadi' },
+  ]},
+  { key: 'goan',      label: 'Goan' },
+  { key: 'punjabi',   label: 'Punjabi' },
+  { key: 'bengali',   label: 'Bengali' },
+  { key: 'marathi',   label: 'Marathi' },
+  { key: 'gujarati',  label: 'Gujarati' },
+  { key: 'rajasthani',label: 'Rajasthani' },
+  { key: 'kashmiri',  label: 'Kashmiri' },
+  { key: 'other',     label: 'Other' },   // custom dishes only; no seeds, not pickable at onboarding
+]
+```
 
-#### 5. Track Tab (Improved)
-- **Date range picker** (Last 7 days, This month, All time)
-- **Summary card** with natural language: "You cooked 12 meals and ordered 3 this week. Spent ₹850."
-- **Stats grid** with visual hierarchy (larger numbers for key metrics)
-- **Spending trend** — simple CSS-based bar chart (no library needed)
-- **Meal log** with filters (by date, meal type, home/out)
-- **Export/Import section** at bottom:
-  - "Export All Data" → downloads JSON file with all aduppu_* data
-  - "Import Data" → file picker to restore from JSON backup
+**Selection semantics** (`model.js#expandCuisines(selectedKeys) -> Set<key>`):
+a region key in `prefs.cuisines` covers the region key **plus all its sub
+keys**; a `region:sub` key covers only that sub **plus the parent region key**
+(region-level dishes are the common base — someone who cooks Chettinad also
+cooks generic Tamil food). All filtering (randomizer, suggestions, Cook
+defaults) goes through this expansion. Dishes may be tagged at either level:
+region for everyday dishes, sub for signature ones.
 
----
+### 4.2 Diet (veg / egg / non-veg)
 
-## Firebase Integration Details
+Every dish carries `diet`; the user's `prefs.diet` maps to allowed values:
 
-### Setup
-- Create Firebase project (free Spark plan)
-- Enable Google Auth provider
-- Create Firestore database with rules:
-  ```
-  rules_version = '2';
-  service cloud.firestore {
-    match /databases/{database}/documents {
-      match /users/{userId}/{document=**} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+| `prefs.diet` | Allowed `dish.diet` | Onboarding label |
+|---|---|---|
+| `veg` | `veg` | "Vegetarian" |
+| `veg-egg` | `veg`, `egg` | "Veg + Egg" |
+| `all` | `veg`, `egg`, `nonveg` | "Everything" |
+
+Diet is a **hard filter** in the randomizer, kitchen suggestions, and Cook's
+default view — never relaxed by any fallback. UI marker: the familiar FSSAI
+dot on dish cards, plan chips, and results (green square-dot = veg, yellow =
+egg, red/brown triangle = non-veg) — render as a small inline SVG, not emoji.
+
+### Seeding defaults (per cuisine, diet-aware)
+
+Seed catalogs live in `model.js` as `SEEDS[key] = { breakfast: [...],
+lunch: [...], dinner: [...] }`, keyed by region **and** sub-cuisine keys.
+Every seed dish carries `diet`.
+
+- **Tamil Nadu (region)**: port v1's `DEFAULTS` lists verbatim as the
+  baseline (8 breakfast / 9 lunch / 8 dinner — names and ingredients from
+  `aduppu.html` lines 407–439), tagged `cuisine: 'tamil-nadu'`, all `veg`.
+- **Every other region** (all §4.1 top-level keys except `other`): the
+  implementer authors ≥5 breakfast / ≥6 lunch / ≥5 dinner authentic, everyday
+  home dishes with realistic ingredient lists — e.g. Kerala: Puttu–Kadala,
+  Appam with stew, Sambar, Avial, Thoran, Meen Curry (nonveg), Erissery;
+  Andhra: Pesarattu, Gongura Pachadi with rice, Gutti Vankaya, Chepala Pulusu
+  (nonveg); Punjabi: Aloo Paratha, Chole, Rajma Chawal, Sarson da Saag with
+  Makki Roti, Butter Chicken (nonveg); Bengali: Luchi–Aloor Dom, Shukto,
+  Machher Jhol with rice (nonveg), Cholar Dal; Marathi: Poha, Thalipeeth,
+  Varan Bhaat, Pithla Bhakri, Misal. Include the region's characteristic
+  non-veg staples tagged `nonveg` (and egg dishes tagged `egg`) — the diet
+  filter below decides who receives them. Favor daily home cooking over
+  restaurant dishes; keep ingredient names in the matcher's normalized
+  vocabulary (lowercase, singular).
+- **Every sub-cuisine**: ≥3 signature dishes tagged to the sub key — e.g.
+  Chettinad: Chettinad Chicken (nonveg), Kara Kuzhambu, Vellai Paniyaram;
+  Malabar: Pathiri, Malabar Biryani (nonveg), Kadala Curry; Udupi–Mangalore:
+  Neer Dosa, Goli Baje, Kori Rotti (nonveg). The bulk of a region's food
+  sits at region level; subs add their distinctives.
+
+**When seeding runs:** seeding is **per cuisine key, filtered by the current
+diet preference** — a vegetarian's catalog is never polluted with non-veg
+seeds. Triggered at onboarding (each selected key + its expansion) and again
+when a cuisine is enabled in Settings **or the diet preference widens** (veg
+→ veg-egg → all: re-run seeding for all enabled cuisines; the previously
+skipped egg/non-veg dishes insert now). Track meta `seeded:<key>:<diet>` per
+tier; inserts use **deterministic ids** (`seed-<key>-<meal>-<n>`), `dirty: 1`.
+Deterministic ids mean two devices that both seed produce the same Drive
+files and converge instead of duplicating, and make diet-widening re-runs
+idempotent. A seeded dish the user deletes stays deleted (tombstone syncs).
+Narrowing diet does NOT delete dishes — they drop out of default views via
+the diet filter. Disabling a favorite cuisine likewise keeps its dishes in
+Cook (filterable); they just leave randomizer/suggestion defaults.
+
+## 5. Core algorithms
+
+### 5.1 Local dates (`dates.js`) — fixes v1's IST bug
+
+Never use `toISOString()` for calendar dates (it returns UTC; before 05:30 IST
+that's *yesterday*). Provide:
+
+```js
+localDateStr(d = new Date())   // 'YYYY-MM-DD' from getFullYear/getMonth/getDate
+addDays(dateStr, n)            // string in, string out
+weekDates(anchor = today)      // [Mon..Sun] containing anchor, as date strings
+dayLabel(dateStr)              // 'Today' / 'Yesterday' / 'Tomorrow' / weekday / '9 Jul'
+```
+
+Unit-test with a fixed Date at `2026-07-09T00:30+05:30` equivalent to prove the
+local date is used.
+
+### 5.2 Randomizer (`randomizer.js`)
+
+```js
+NO_REPEAT_DAYS = { breakfast: 2, lunch: 10, dinner: 3 }
+
+pickDish(meal, date, { dishes, plans, logs, exclude = [], cuisines = null, diet = 'all' })
+```
+
+0. **Diet first, and hard**: drop every dish whose `diet` is not allowed by
+   `diet` (§4.2 table). No fallback below ever crosses this line.
+1. Filter the remainder to `expandCuisines(cuisines)` when given (the day's
+   chosen cuisine, or the user's favorites for "Mix").
+2. Build `lastUsed[name]` for this meal: latest date each dish name appears in
+   any plan item's `meals[meal]` or any log's `dish` (exact name match) with
+   `date < target date`.
+3. Pool = filtered dishes of that meal, minus `exclude`, minus names used
+   within `NO_REPEAT_DAYS[meal]` days before `date`.
+4. If pool is non-empty → uniform random pick.
+5. If pool is empty → relax in order: (a) least-recently-used within the
+   cuisine filter; (b) if the cuisine filter itself has no dishes for this
+   meal at all, widen to the user's favorite cuisines, then to all cuisines —
+   never return `null` while any dish of that meal exists.
+6. Return the dish name, or `null` if the meal has no dishes at all.
+
+Semantics in the UI:
+- **Fill day / Fill week 🎲** first asks the cuisine (see §7 Plan): the
+  chosen key (or the favorites array for "Mix") flows in as `cuisines`, and a
+  single chosen cuisine is stored on the plan item(s) as `plan.cuisine`.
+- Fill **empty slots only** — never overwrite a slot the user set.
+  Sequential fill, passing already-chosen names for that day in `exclude` so
+  one day never repeats itself.
+- **Per-slot 🎲**: rerolls that slot, `exclude = [currentValue]`;
+  `cuisines` = the day's `plan.cuisine` if set, else the favorites.
+
+Tests add: cuisine filtering respected; widening fallback (a) → (b); the
+favorites-mix path draws from multiple cuisines; **diet is never violated by
+any fallback** (a veg user with only non-veg dishes for a meal gets `null`,
+not a non-veg pick); region selection includes sub-cuisine dishes and
+sub-only selection includes region-level dishes.
+
+Pure functions over passed-in data — fully unit-testable (test: window
+exclusion per meal type, LRU fallback when pool exhausted, fill-only behavior,
+no same-day duplicates).
+
+### 5.3 Kitchen matching (`kitchen.js`) — replaces v1's substring matcher
+
+v1's bidirectional substring match made "rice" satisfy "rice flour". New rules:
+
+```js
+STAPLES = ['salt','oil','water','mustard','mustard seeds','curry leaves',
+           'turmeric','ghee','sugar','asafoetida','cumin','jeera']
+
+normalize(s)   // lowercase, trim, collapse spaces, strip trailing 's' per word
+
+matchDish(dish, pantry, { staplesOn = true })
+// required = dish.ingredients, minus STAPLES when staplesOn
+// an ingredient is available iff normalize-equal to a pantry entry
+// → { status: 'full' | 'partial' | 'none', have, missing, score }
+// full: every required available; partial: score >= 0.5
+```
+
+Staples toggle ("I have the basics") defaults ON and is remembered in
+localStorage. Tests: exact-match only ("rice" ≠ "rice flour"), plural
+insensitivity ("tomatoes" = "tomato"), staples exclusion flips a partial to full.
+
+### 5.4 Backup (`model.js`)
+
+`exportAll(store)` → JSON blob `{ app:'aduppu', schema:1, exported_at, items:[...] }`
+download as `aduppu-backup-YYYY-MM-DD.json`. `importAll(store, json)` upserts by
+id keeping the newer `updated_at`, marks imported items dirty, returns counts.
+
+## 6. Ported infrastructure — file by file
+
+| Target | Source (in Nisaba repo) | Changes |
+|---|---|---|
+| `app/src/lib/sync.js` | `app/src/lib/sync.js` | verbatim (attachment paths stay; they no-op with no attachments) |
+| `app/src/lib/drive.js` | `app/src/lib/drive.js` | folder name `Aduppu`; boundary prefix `aduppu-` |
+| `app/src/lib/store-idb.js` | same | DB name `aduppu` |
+| `app/src/lib/store-memory.js` | same | verbatim |
+| `app/src/lib/auth.js` | same | delete `createServiceAuth` + `serviceConfig` (no desktop); `ns_*` keys → `ad_*`; `AUTH_WORKER_DEFAULT = 'https://aduppu-auth.orionforge.dev'`; override key `ad_auth_worker` |
+| `app/src/lib/merge.js` | same | drop conflict-copy branch + `bodyEqual`; `newItem` defaults per §4 |
+| `app/src/lib/theme.js` | same | key `ad:mode`; `THEME_COLOR = { paper:'#e2d6ba', dark:'#171410' }` (unchanged values) |
+| `app/src/lib/pwaInstall.js` | same | verbatim |
+| `app/test/mock-drive.js` | `app/test/mock-drive.js` | verbatim |
+| `app/test/sync.test.js` | `app/test/sync.test.js` | adapt item fixtures to §4 shapes; drop conflict-copy assertions; keep two-device round-trip, tombstone GC, md5/version tests |
+| `worker/src/index.js` | `worker/src/index.js` | cookie const `ad_session`; comment header says Aduppu |
+| `worker/wrangler.toml` | `worker/wrangler.toml` | name/vars per §3 |
+| `worker/README.md` | `worker/README.md` | names/URLs per §3 |
+| `docs/GOOGLE_SETUP.md` | `docs/GOOGLE_SETUP.md` | s/Nisaba/Aduppu/; origins list = localhost:5173 + aduppu.orionforge.dev; project name `Aduppu` |
+| `.github/workflows/deploy-pages.yml` | same | working-directory `aduppu/app`; name "Deploy Aduppu…"; trigger paths `aduppu/**` |
+| `app/vite.config.js` | same | env var `ADUPPU_BASE`; same PWA/workbox config; `includeAssets` for our icon files |
+| `app/index.html` | same | title Aduppu, theme-color `#e2d6ba` |
+| `app/src/main.jsx` | same | keep structure (SW register, storage.persist, chunk-reload guard, theme before paint); fonts per §8; no notePrefs |
+
+`app/package.json` dependencies: `react`, `react-dom`,
+`@fontsource/inter` (400/500/600/700), `@fontsource/saira-condensed`
+(400/600/800), `@fontsource/caveat` (700). Dev: `vite`, `@vitejs/plugin-react`,
+`vite-plugin-pwa`, `vitest`, `playwright-core`. **No BlockNote, no other fonts.**
+
+## 7. UI spec
+
+Shell = Nisaba's exactly: sticky blurred header (logo + wordmark, sync status
+pill, gear), 640px column, fixed bottom tab bar with safe-area padding, FAB
+where noted, `.card` lists, eyebrow section headings, long-press multi-select
+where noted. Port `App.jsx`'s shell scaffolding (tabs state, selection mode,
+status wiring, sign-in gate, Settings) and replace the Notes/Tasks screens with
+the four tabs below.
+
+**Tabs**: 🍳 wordless icons + labels TODAY · PLAN · COOK · TRACK (Saira
+Condensed uppercase, like Nisaba's). Settings via gear only.
+
+### Sign-in gate
+Port `SignInScreen` + `SetupScreen` verbatim (Aduppu logo/wordmark/copy:
+"Your meals, planned from your own kitchen — synced through your own Google
+Drive."). Same `ad_skip_signin` semantics. **Status pill: when the user chose
+local-only, show neutral gray `local`, not red** — red is reserved for real
+errors (`offline`, `update app`). `tap to sync` appears only after a previously
+signed-in session loses auth.
+
+### Onboarding (first run, right after the sign-in gate — two steps)
+Shown when no `prefs` item exists locally — but for a signed-in user, only
+after the first sync round completes (an existing Drive `prefs` item means
+this device is a reinstall: skip onboarding, don't re-ask). Full-screen,
+same visual language as the sign-in screen, step dots at the bottom.
+
+**Step 1 — Diet.** Heading "How do you eat?" with three large cards:
+**Vegetarian** / **Veg + Egg** / **Everything** (§4.2 mapping), each with its
+FSSAI dot. Single-select, explicit — no default preselected; the user must
+tap one to continue.
+
+**Step 2 — Cuisines.** Eyebrow "YOUR KITCHEN" + heading "Which cuisines do
+you cook?" + lead text "Pick your favourites — Aduppu seeds each one with
+everyday dishes and plans around them. You can change this anytime in
+Settings."
+- One tappable card per top-level region (all §4.1 keys except `other`),
+  Nisaba `.toggle`/`.seg` styling, multi-select. Regions with sub-cuisines
+  show a small "e.g. Chettinad, Kongunad…" caption and a chevron that expands
+  an indented row of **sub-cuisine chips**: tapping the region card selects
+  the whole region; expanding and picking specific subs narrows to those
+  (region card then renders in a "partial" state). Minimum one selection
+  (region or sub) to continue.
+- "Continue" → create the `prefs` item (diet + cuisines), seed each selected
+  key per §4 Seeding (diet-filtered), land on Today.
+
+### Today
+- Date heading (eyebrow `TODAY` + "Thursday, 9 July" display line).
+- Three meal cards (Breakfast / Lunch / Dinner), each showing:
+  - the **planned** dish for today's plan item (or "Nothing planned" + 🎲),
+  - per-slot 🎲 (reroll semantics §5.2),
+  - **"Cooked this ✓"** one-tap button when planned & not yet logged → creates
+    `{type:'log', mode:'home', dish: planned}` instantly (toast + Undo),
+  - logged entries for that meal today (mode chip 🏠/🛵, cost, notes), each
+    tappable to edit inline, deletable (Undo toast, no confirm dialog),
+  - an **inline log composer** (Nisaba's add-composer pattern): text input +
+    home/out toggle + ₹ cost (shown for "out") + optional note; Enter saves.
+- Summary strip when there are logs today: cooked n · ordered n · ₹ spent.
+
+### Plan
+- Seven day-pills (Mon–Sun of current week) + ‹ › week arrows; today
+  highlighted, past days dimmed. Selected day defaults to today.
+- Selected day: three meal boxes — planned name (tap to edit as inline text
+  input with dish-name autocomplete from the catalog), per-slot 🎲, "pick from
+  catalog" opens the Cook-style list in a bottom sheet, "✓ had this" logged
+  indicator when a log matches that day+meal.
+- Buttons: **Fill day 🎲** and **Fill week 🎲** (fill-empty-only, §5.2).
+  Both first open a **cuisine ask** — a small bottom sheet: "What are we
+  cooking?" with one pill per favorite cuisine plus **"Mix"** (all favorites;
+  default, pre-focused so double-tap = old one-tap behavior). A single chosen
+  cuisine is stamped on the affected plan item(s) as `plan.cuisine` and shown
+  as a small chip on the day header (removable — clearing it reverts rerolls
+  to favorites-mix). Week fill applies the choice to all seven days.
+- Below, a compact **week overview**: 7 rows × 3 meal chips (no horizontal
+  scroll grid — the 640px column stacks); days with a cuisine show its chip.
+
+### Cook
+- Search bar (Nisaba's pill search) filtering by name / ingredient / tag /
+  cuisine.
+- Mode toggle pills: **All dishes | From my kitchen**.
+- *All dishes*: meal-type filter chips (All/Breakfast/Lunch/Dinner) plus a
+  **cuisine filter** (All + one chip per cuisine that has dishes — favorites
+  first; sub-cuisines appear indented under their region when the region chip
+  is active). The user's diet is the default view filter, with a quick
+  toggle to reveal excluded dishes (labelled e.g. "Show non-veg") so the
+  catalog is never hidden, just filtered. Dish cards grouped by meal with
+  eyebrow headings; card = FSSAI diet dot + name + cuisine chip + ingredient
+  preview + tag chips; expands in place (Nisaba task-card pattern) to full
+  ingredients, ref, notes, meal selector, cuisine selector, diet selector —
+  all inline-editable; ⋯ menu → Delete (Undo toast). Inline **add composer**
+  at top: name + meal select (new dishes default to the user's first favorite
+  cuisine and `veg`; changeable in the expanded editor), Enter saves,
+  expand-to-edit for details.
+- *From my kitchen*: pantry chip input (type + Enter adds a chip, ✕ removes;
+  persisted via the `pantry` item), "I have the basics" staples toggle, then
+  two sections: **Can cook now** (full matches) and **Almost there** (partial,
+  sorted by score, "Need: …" line). Results respect the diet preference
+  (hard filter) and default to the favorite cuisines (the same cuisine chips
+  as *All dishes* widen the net). Each result: FSSAI dot + "Plan it →"
+  (day/meal picker sheet) and "Log it" shortcuts.
+
+### Track
+- Range toggle pills: **7 days | This month | All**.
+- Natural-language summary card: "You cooked 12 meals and ordered 3 this
+  week. Orders ₹850, groceries ₹1,200."
+- 2×2 stat tiles (home-cooked, ordered, order spend, grocery spend) styled as
+  `.card` with big number (Saira Condensed).
+- Grocery: inline add composer (date defaults today, ₹ amount, note) + recent
+  entries list, edit/delete.
+- Meal log: entries grouped by day buckets (Nisaba's `groupByCreated` pattern
+  keyed on `log.date`), row = meal chip + mode chip + dish + ₹ + note; tap to
+  edit inline; long-press multi-select → bulk delete (selbar).
+
+### Settings (gear)
+Port Nisaba's Settings structure, minus Note-text card, minus Trash:
+- **Appearance**: Paper / Lights out toggle.
+- **Diet**: the same three cards as onboarding Step 1, editing `prefs.diet`.
+  Widening (veg → veg-egg → all) triggers the diet-widening re-seed (§4) with
+  a toast; narrowing just filters — lead text says "Dishes outside your diet
+  are hidden from suggestions, never deleted."
+- **Cuisines**: the same region cards + expandable sub-cuisine chips as
+  onboarding Step 2 (min 1), editing the synced `prefs` item. Enabling a
+  cuisine that has never been seeded on this account triggers its seeding
+  (§4, diet-filtered) with a toast ("Added 16 Punjabi dishes to Cook");
+  disabling one only removes it from randomizer / suggestion defaults — its
+  dishes stay in Cook. Lead text explains exactly that.
+- **Account & sync**: Drive status pill, item count, Connect/Sign out.
+- **App & storage**: install state + Install button (pwaInstall), offline-copy
+  persistence row, **Export backup** / **Import backup** buttons (§5.4).
+- **About**: one paragraph ("Aduppu — your kitchen's rhythm… data lives in
+  your own Google Drive as plain JSON. அடுப்பு = hearth.").
+
+### Identity
+- `Logo` component: stroke-based SVG, `currentColor` + `var(--accent)` (like
+  Nisaba's): a rounded **clay pot** arc sitting on three hearth stones with a
+  three-tongue **flame** above in accent. Keep it legible at 16px.
+- Wordmark "Aduppu" in Caveat 700 (`.word` class swap; no text-stroke needed —
+  Caveat is heavier than Great Vibes).
+- `public/icon.svg`: the mark on paper background, rounded-square. Generate
+  `pwa-192/512/maskable` PNGs by rendering the SVG in headless Chromium
+  (playwright-core script in `app/scripts/gen-icons.cjs`; chromium at
+  `/opt/pw-browsers/chromium` in the dev container).
+
+## 8. Styles
+
+Port `styles.css` wholesale, then:
+- Accent swap: `--accent: #b5541c` (terracotta); dark mode `--accent: #e0824a`;
+  `--accent-ink: #fdf3e7`. Everything else in the palette (paper canvas, cards,
+  ink, gold, overdue/success) stays.
+- Delete: note-ink blocks, per-note color palette (`--nc-*`, `[data-color]`),
+  BlockNote (`.bn-*`), font-dropdown, swatch/color-pop, thumbs, note-card
+  specifics, trash styles.
+- Add (following existing patterns): meal chips (`.chip` variants for
+  breakfast/lunch/dinner using accent/gold/muted washes — stay within the
+  one-accent discipline: tint, don't rainbow), stat tiles, week-overview rows,
+  mode toggle (home/out), summary strip, pantry chip input.
+- Keep: reduced-motion, focus-visible, safe-areas, selection bar, sheets.
+
+## 9. App wiring (App.jsx)
+
+Same skeleton as Nisaba's `App.jsx`:
+- `store` singleton, `useMemo` auth+drive+engine on `clientId`.
+- 30s interval + focus-listener sync; `engine.gc()` after sync.
+- `saveItem(partial)` = upsert + `updated_at` + `dirty:1` + `engine.schedule()`.
+- Onboarding gate: after the sign-in gate, render the cuisine picker until a
+  `prefs` item exists (§7 Onboarding); seeding (§4) runs per selected cuisine.
+- Derived state per tab from `items`: `dishes`, `plansByDate` (Map),
+  `logsByDate`, `grocery`, `pantry`, `prefs` (favorite cuisines).
+- Undo toast helper: `deleteWithUndo(item)` tombstones immediately, shows toast
+  5s with Undo → restores (`deleted:false`). One toast at a time.
+- STATUS_LABEL per Nisaba minus the guilt-red mapping change (§7 sign-in).
+
+## 10. Build order (suggested commits)
+
+1. **Scaffold**: `aduppu/app` (package.json, vite config, index.html, main.jsx,
+   empty App shell rendering header+tabs), remove root `manifest.json`/`sw.js`/
+   `icons/`. `npm run dev` shows the shell.
+2. **Lib port**: all §6 files + `dates/model/randomizer/kitchen` + all tests.
+   `npm test` green. (Biggest verification win — sync engine proven against
+   mock Drive before any UI exists.)
+3. **Styles + identity**: styles.css port with terracotta, Logo, icons script,
+   manifest, CNAME.
+4. **Tabs**: Today → Plan → Cook → Track → Settings, in that order (Today
+   exercises logs+plans+randomizer; the rest reuse those patterns).
+5. **Worker + docs**: `aduppu/worker`, `docs/GOOGLE_SETUP.md`, deploy workflow,
+   README rewrite.
+6. **Verify** (§11), fix, push.
+
+## 11. Verification
+
+- `npm test` — all suites green.
+- `npm run build` — clean; inspect `dist/` size (should be ~⅓ of Nisaba's, no
+  BlockNote).
+- Playwright smoke script (pattern exists from the review session): dev server
+  + headless Chromium (`/opt/pw-browsers/chromium`), viewport 390×844:
+  skip sign-in → onboarding step 1: pick "Vegetarian" → step 2: select Tamil
+  Nadu (whole region) + Kerala → Malabar (sub only) → Cook shows seeds from
+  both, all veg (no non-veg seeded), with cuisine chips and FSSAI dots →
+  Fill day 🎲 choosing "Kerala" plans only Kerala/Malabar veg dishes →
+  "Cooked this ✓" on Today → log an ordered meal with cost → Track shows
+  correct stats → Settings: widen diet to "Everything" → non-veg dishes
+  appear in Cook after the re-seed toast → dark
+  mode → screenshots of all five screens. Attach screenshots to the PR/summary.
+- Manual checklist in the summary for the owner (things only they can do):
+  1. Google Cloud: new project `Aduppu`, enable Drive API, consent screen →
+     publish, Web client id with origins `http://localhost:5173` +
+     `https://aduppu.orionforge.dev` (docs/GOOGLE_SETUP.md walks through it).
+  2. Bake the client id into `App.jsx` `DEFAULT_CLIENT_ID` (or paste it into
+     the app's setup screen at runtime).
+  3. Worker: `wrangler kv namespace create SESSIONS` → id into wrangler.toml,
+     `wrangler secret put GOOGLE_CLIENT_SECRET`, `wrangler deploy`, add custom
+     domain `aduppu-auth.orionforge.dev`.
+  4. GitHub Pages: enable for the repo (workflow deploys `aduppu/app/dist`),
+     custom domain `aduppu.orionforge.dev` (CNAME file ships in `public/`),
+     DNS CNAME in Cloudflare → `pbparthas.github.io`, enforce HTTPS.
+
+## 12. Out of scope (deliberate, for later)
+
+- Recipe photos (sync engine's attachment support is ported but dormant — no UI).
+- Trash/restore screen (tombstones + 30-day GC run underneath; Undo toast
+  covers the immediate-mistake case).
+- Desktop (Tauri) shell, local REST/MCP service, multi-user/family sharing.
+- Grid week view for wide screens; nutrition data.
+- Cross-app bridge to Nisaba (e.g. "send shopping list as a Nisaba task").
+  Deliberately not built: the apps use separate OAuth clients, so with
+  `drive.file` scope neither can see the other's Drive files — bridging would
+  require sharing one OAuth client (reversing the isolation decision in §3)
+  and coupling Aduppu to Nisaba's item schema. The shopping list is native to
+  Aduppu instead (§13.2). Revisit only if the owner asks again after using it.
+
+## 13. Phase 2 — owner-requested features (build AFTER core v3 ships and is verified)
+
+Do not start these until §11 verification passes and the owner has the core
+app deployed. Both are specced here so no re-design is needed.
+
+### 13.1 Photo-to-pantry ("scan my kitchen")
+
+Take a photo of ingredients/shelf/fridge; a vision model extracts an
+ingredient list that prefills the pantry chips in Cook → "From my kitchen".
+
+**This is the ONLY AI-dependent feature in the app** — everything else
+(randomizer, matching, shopping list) is deterministic code. Keep the
+provider fully swappable: the app contract is only `POST /vision` →
+`{ ingredients: string[] }`, and the model call must live in one function in
+the Worker (`callVisionModel(env, image, mediaType) -> string[]`) so
+switching to another vision-capable LLM (Claude, OpenAI, self-hosted) is a
+one-function edit plus a secret swap. If no vision secret is configured,
+return 501 — the app hides the scan button and works fully without AI.
+
+**Architecture:** the browser never holds an AI API key. Add one endpoint to
+the existing auth Worker (`aduppu/worker`), which already holds secrets and
+allowlists origins:
+
+- `POST /vision` — body `{ image: <base64 jpeg>, media_type: 'image/jpeg' }`.
+  Auth: require a valid `ad_session` cookie (same KV lookup as `/refresh`) AND
+  the CORS origin allowlist — never serve anonymous calls (401). Rate-limit
+  via KV counter (e.g. key `vision:<date>`, max 30/day, 429 beyond) — the
+  free tier has daily request caps, so the limiter protects the quota.
+- **Provider (owner decision, 2026-07-09): Gemini free tier.** Worker calls
+  the Gemini API via plain `fetch` (keeps the Worker zero-dependency, same
+  style as the auth code). Key via `wrangler secret put GEMINI_API_KEY`
+  (create free at https://aistudio.google.com/apikey). Model: the current
+  free-tier Flash model — `gemini-2.5-flash` as of this writing; verify the
+  current free-tier model id when implementing. Use a JSON response schema so
+  the reply is guaranteed-parseable:
+
+  ```js
+  const PROMPT =
+    'List every food ingredient you can identify in this photo of a home kitchen. ' +
+    'Use common English grocery names in lowercase singular form (e.g. "tomato", ' +
+    '"toor dal", "curry leaves", "rice flour"). Indian/South Indian household context. ' +
+    'Only include items you can actually see; do not guess at closed containers.';
+
+  async function callVisionModel(env, image, mediaType) {
+    const r = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY },
+        body: JSON.stringify({
+          contents: [{ parts: [
+            { inline_data: { mime_type: mediaType, data: image } },
+            { text: PROMPT },
+          ] }],
+          generationConfig: {
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: 'OBJECT',
+              properties: { ingredients: { type: 'ARRAY', items: { type: 'STRING' } } },
+              required: ['ingredients'],
+            },
+          },
+        }),
       }
-    }
+    );
+    if (!r.ok) throw new Error('vision ' + r.status);
+    const data = await r.json();
+    return JSON.parse(data.candidates[0].content.parts[0].text).ingredients;
   }
   ```
 
-### Data Structure in Firestore
+- Worker responds `{ ingredients: [...] }`; on upstream error, pass through a
+  502 with a short message (429 from Gemini → 429 to the app: "daily scan
+  quota reached").
+
+**App side (Cook tab):**
+- 📷 "Scan my kitchen" button next to the pantry chip input. Hidden when
+  offline (`navigator.onLine`) or not signed in (no session cookie → 401).
+- `<input type="file" accept="image/*" capture="environment">` → downscale on
+  a canvas to ≤1280px long edge, JPEG quality 0.8 (controls upload size and
+  image-token cost; full-res would cost ~3× for no recognition benefit) →
+  base64 → `fetch(worker + '/vision', { credentials: 'include', ... })`.
+- Results render as **pending chips** (visually distinct, e.g. dashed border)
+  the user confirms or removes before they merge into the pantry item —
+  vision output is good but not infallible; never silently overwrite the
+  pantry. Normalize through `kitchen.js#normalize` before merging; drop
+  duplicates against existing pantry entries.
+- Spinner + "reading your kitchen…" state; errors surface as a toast.
+
+**Cost note for the owner:** ₹0 — Gemini Flash's free tier covers personal
+scan volumes comfortably (the KV rate limit keeps usage inside the daily
+quota). Owner setup is one step: create a free API key at Google AI Studio
+and `wrangler secret put GEMINI_API_KEY`. If the secret is absent the Worker
+returns 501 and the app hides the scan button after the first 501.
+
+### 13.2 Shopping list (checklist, native to Aduppu — not a Nisaba task)
+
+Owner decision (2026-07-09): the shopping list lives **in Aduppu**, not as a
+task pushed to Nisaba — see §12 for why the cross-app bridge is out. The
+in-app version also enables a loop Nisaba can't: buying an item updates the
+pantry, which improves "From my kitchen" matching.
+
+**Data:** one synced singleton, same pattern as pantry (single-device LWW):
+
+```js
+{ id: 'shopping', type: 'shopping',
+  items: [ { id, name, note: '', done: false, from: 'plan'|'manual' } ] }
 ```
-users/{uid}/
-├── dishes      # { breakfast: [...], lunch: [...], dinner: [...] }
-├── plan        # { Monday: { breakfast: "Idli", ... }, ... }
-├── track       # [ { id, date, meal, type, dish, cost, notes }, ... ]
-├── grocery     # [ { id, date, amount, note }, ... ]
-└── recipes     # [ { id, name, reference, tags, meal, ingredients, notes }, ... ]
-```
 
-### Sync Logic (js/firebase.js)
-- On sign-in: Load data from Firestore → merge with any localStorage data → render
-- On data change: Write to both localStorage (instant) and Firestore (async)
-- On sign-out: Keep localStorage data, stop Firestore sync
-- "Continue without sign-in": localStorage only, show subtle banner "Sign in to sync across devices"
+**Generation:** button "Build list from plan" on the shopping sheet:
+1. Collect ingredients of every dish planned for the next 7 days (today
+   inclusive; dish names resolved against the catalog, unknown names skipped).
+2. Subtract pantry entries and STAPLES (normalized matching via `kitchen.js`).
+3. Dedupe against items already on the list (by normalized name).
+4. Present the candidates as pending additions the user confirms (same
+   pending-chip pattern as §13.1) — never auto-add.
 
-### Firebase Config
-- Firebase config object embedded in `js/firebase.js`
-- Firebase SDK loaded from CDN (no build step needed)
-- Modular imports via `<script type="module">`
+**UI:** a bottom-sheet (Nisaba `.overlay`/`.panel` pattern) opened from a
+🛒 button in the Plan tab header, plus a Settings row. Checklist rows use
+Nisaba's `.tick` pattern; inline add-composer for manual items; count badge
+on the 🛒 button while any unchecked items exist.
 
----
+**The pantry loop:** "Clear bought" removes checked items from the list and
+adds their names to the pantry item (normalized, deduped) in one action, with
+an Undo toast covering the whole batch.
 
-## Critical Files to Modify/Create
-
-| File | Action | Description |
-|------|--------|-------------|
-| `index.html` | **Create** | New HTML shell with all tab markup, Firebase SDK scripts |
-| `css/style.css` | **Create** | Extracted + redesigned styles |
-| `js/app.js` | **Create** | Tab switching, init, toast, shared utilities |
-| `js/firebase.js` | **Create** | Firebase config, auth UI, Firestore CRUD |
-| `js/data.js` | **Create** | Data layer — defaults, lsGet/lsSet, sync wrapper |
-| `js/today.js` | **Create** | Today tab render + quick log |
-| `js/planner.js` | **Create** | Plan tab render + randomize |
-| `js/suggest.js` | **Create** | Suggest tab render + matching |
-| `js/dishes.js` | **Create** | Dishes tab render + CRUD |
-| `js/recipes.js` | **Create** | NEW recipes tab render + CRUD |
-| `js/track.js` | **Create** | Track tab render + grocery + export/import |
-| `js/backup.js` | **Create** | Export/Import JSON logic |
-| `manifest.json` | **Keep** | Already created, update if needed |
-| `sw.js` | **Update** | Add all new files to cache list |
-
----
-
-## Implementation Order
-
-1. **Create `css/style.css`** — Full redesigned stylesheet
-2. **Create `js/data.js`** — Data layer with defaults + sync wrapper
-3. **Create `js/firebase.js`** — Firebase auth + Firestore sync
-4. **Create `js/app.js`** — Core app logic (tabs, toast, init)
-5. **Create `index.html`** — New HTML structure with 6 tabs
-6. **Create tab JS files** — today.js, planner.js, suggest.js, dishes.js, recipes.js, track.js, backup.js
-7. **Update `sw.js`** — Cache all new files
-8. **Test locally** — Verify all tabs work, auth flow, data persistence
-9. **Commit and push** to `claude/aduppu-pwa-setup-S1W0Q`
-
----
-
-## Verification Plan
-
-1. **Open `index.html` in browser** — All 6 tabs should render, switching should animate
-2. **Sign-in flow** — Google sign-in button works (requires Firebase project setup by user)
-3. **"Continue without sign-in"** — App works with localStorage only
-4. **Recipes tab** — Add recipe with name, reference, tags, ingredients; verify it appears in list; use "Add to Planner" to assign to a day
-5. **Today tab** — Log a meal with autocomplete, verify it shows in summary
-6. **Plan tab** — Randomize week, verify grid/day views work
-7. **Track tab** — Export data as JSON, clear localStorage, import JSON — data should restore
-8. **PWA install** — Open on mobile, verify install prompt works
-9. **Offline** — Disconnect network, verify app loads from cache
-10. **GitHub Pages** — Push to branch, enable Pages, verify app loads at `https://<user>.github.io/aduppu/`
-
----
-
-## Note on Firebase Setup
-
-The user will need to:
-1. Create a Firebase project at https://console.firebase.google.com
-2. Enable Google Auth provider
-3. Create Firestore database
-4. Copy the Firebase config into `js/firebase.js`
-5. Add their GitHub Pages domain to Firebase Auth authorized domains
-
-I'll include placeholder config with clear instructions in the code.
+**Reminders:** deliberately none in this phase. A PWA cannot fire reliable
+scheduled notifications without a push server (out of scope; the Worker could
+host Web Push later if the owner asks). The checklist + badge is the v1
+reminder surface.
