@@ -62,7 +62,7 @@ input, textarea, button { font-family: inherit; }
 .shell {
   max-width: 640px; margin: 0 auto;
   min-height: 100dvh;
-  padding-bottom: calc(78px + env(safe-area-inset-bottom));
+  padding-bottom: calc(62px + env(safe-area-inset-bottom));
 }
 
 /* ---------- header ---------- */
@@ -477,11 +477,11 @@ input, textarea, button { font-family: inherit; }
 .tabs-inner { display: flex; max-width: 640px; width: 100%; }
 .tab {
   flex: 1; background: none; border: none; cursor: pointer;
-  padding: 11px 2px 13px; color: var(--muted);
+  padding: 8px 2px 10px; color: var(--muted);
   font-family: "Saira Condensed", "Arial Narrow", sans-serif;
-  font-weight: 600; font-size: 14px; letter-spacing: 0.09em;
+  font-weight: 600; font-size: 12px; letter-spacing: 0.09em;
   border-top: 2px solid transparent;
-  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
 }
 .tab svg { width: 20px; height: 20px; }
 .tab.on { color: var(--accent); border-top-color: var(--accent); }
