@@ -593,26 +593,69 @@ input, textarea, button { font-family: inherit; }
   display: flex; flex-direction: column; align-items: center; gap: 8px;
   font-size: 14px; font-weight: 600;
 }
-.diet-card .diet-dot { width: 24px; height: 24px; }
-.diet-card.on { border-color: var(--accent); background: var(--accent-wash); color: var(--accent); }
+.diet-card .diet-dot { width: 24px; height: 24px; border-radius: 50%; }
+.diet-card.on, .diet-card.selected { border-color: var(--accent); background: var(--accent-wash); color: var(--accent); }
 
-/* cuisine cards — multi-select with sub-cuisine expand */
+/* cuisine cards — multi-select with collapsible sub-cuisine dropdown */
 .cuisine-cards {
-  display: flex; flex-direction: column; gap: 8px;
+  display: flex; flex-direction: column; gap: 0;
   width: 100%; margin: 12px 0; text-align: left;
 }
-.cuisine-card {
-  background: var(--card); border: 1px solid var(--line);
-  border-radius: var(--radius); padding: 12px 14px;
-  cursor: pointer; font-size: 14px; font-weight: 600;
+.cuisine-group {
+  border-bottom: 1px solid var(--line);
+}
+.cuisine-group:last-child { border-bottom: none; }
+.cuisine-row {
   display: flex; align-items: center; gap: 10px;
+  padding: 14px 16px; cursor: pointer;
+  background: var(--card);
+  font-size: 15px; font-weight: 600;
+  border: none; width: 100%; text-align: left;
+  transition: background .12s;
 }
-.cuisine-card.on { border-color: var(--accent); background: var(--accent-wash); color: var(--accent); }
-.cuisine-card .chev { margin-left: auto; }
-.sub-cuisines {
-  display: flex; flex-wrap: wrap; gap: 6px;
-  padding: 8px 0 4px 34px;
+.cuisine-row:first-child { border-radius: var(--radius) var(--radius) 0 0; }
+.cuisine-group:last-child .cuisine-row { border-radius: 0 0 var(--radius) var(--radius); }
+.cuisine-group:first-child .cuisine-row { border-radius: var(--radius) var(--radius) 0 0; }
+.cuisine-group:only-child .cuisine-row { border-radius: var(--radius); }
+.cuisine-row:hover { background: var(--accent-wash); }
+.cuisine-check {
+  width: 22px; height: 22px; border-radius: 7px; flex: none;
+  border: 1.5px solid var(--line); background: transparent;
+  display: grid; place-items: center; font-size: 13px; line-height: 0;
+  color: transparent; transition: background .12s, border-color .12s;
 }
+.cuisine-check.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.cuisine-check.partial { border-color: var(--accent); background: var(--accent-wash); color: var(--accent); }
+.cuisine-name { flex: 1; }
+.cuisine-hint { font-size: 12px; color: var(--muted); font-weight: 400; }
+.cuisine-chev {
+  font-size: 11px; color: var(--muted); flex: none;
+  transition: transform .15s; padding: 4px;
+}
+.cuisine-chev.open { transform: rotate(180deg); color: var(--accent); }
+/* sub-cuisine dropdown */
+.sub-list {
+  background: color-mix(in srgb, var(--card) 60%, var(--bg));
+  padding: 4px 16px 10px 50px;
+}
+.sub-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 0; border-top: 1px solid var(--line);
+  cursor: pointer; font-size: 14px; font-weight: 500;
+  background: none; border-left: none; border-right: none; border-bottom: none;
+  width: 100%; text-align: left; color: var(--ink);
+}
+.sub-row:first-child { border-top: none; }
+.sub-check {
+  width: 18px; height: 18px; border-radius: 6px; flex: none;
+  border: 1.5px solid var(--line); background: transparent;
+  display: grid; place-items: center; font-size: 11px; line-height: 0;
+  color: transparent; transition: background .12s, border-color .12s;
+}
+.sub-check.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+/* settings variant — inside a card */
+.cuisine-cards.settings { border-radius: var(--radius); overflow: hidden; border: 1px solid var(--line); }
+.cuisine-cards.settings .cuisine-row { border-radius: 0; }
 
 /* ---------- a11y ---------- */
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }

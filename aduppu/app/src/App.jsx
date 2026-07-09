@@ -462,51 +462,16 @@ function OnboardingScreen({ saveItem, store, engine, refresh }) {
         {step === 2 && (
           <div className="onboard-step">
             <h2 className="onboard-heading">Which cuisines do you cook?</h2>
-            <div className="cuisine-cards">
-              {pickable.map((region) => {
-                const regionSelected = selectedCuisines.has(region.key);
-                const hasSubs = region.subs && region.subs.length > 0;
-                const expanded = expandedRegion === region.key;
-                const someSubsSelected = hasSubs && region.subs.some((s) => selectedCuisines.has(s.key));
-
-                return (
-                  <div key={region.key} className="cuisine-group">
-                    <button
-                      className={'cuisine-card' + (regionSelected || someSubsSelected ? ' selected' : '')}
-                      onClick={() => toggleCuisine(region.key)}
-                    >
-                      <span className="cuisine-label">{region.label}</span>
-                      {hasSubs && (
-                        <span className="cuisine-hint">
-                          e.g. {region.subs.slice(0, 2).map((s) => s.label).join(', ')}...
-                        </span>
-                      )}
-                    </button>
-                    {hasSubs && (regionSelected || someSubsSelected) && (
-                      <button
-                        className="cuisine-expand"
-                        onClick={(e) => { e.stopPropagation(); setExpandedRegion(expanded ? null : region.key); }}
-                      >
-                        {expanded ? 'Hide sub-cuisines' : 'Choose sub-cuisines'}
-                      </button>
-                    )}
-                    {hasSubs && expanded && (
-                      <div className="sub-chips">
-                        {region.subs.map((sub) => (
-                          <button
-                            key={sub.key}
-                            className={'sub-chip' + (selectedCuisines.has(sub.key) ? ' selected' : '')}
-                            onClick={() => toggleCuisine(sub.key)}
-                          >
-                            {sub.label}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+            <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 12 }}>
+              Pick your favourites — Aduppu seeds each one with everyday dishes. You can change this anytime in Settings.
+            </p>
+            <CuisinePicker
+              pickable={pickable}
+              selected={selectedCuisines}
+              expandedRegion={expandedRegion}
+              setExpandedRegion={setExpandedRegion}
+              onToggle={toggleCuisine}
+            />
             <div className="onboard-nav">
               <button className="btn ghost" onClick={() => setStep(1)}>Back</button>
               <button
@@ -520,6 +485,63 @@ function OnboardingScreen({ saveItem, store, engine, refresh }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ---- Shared Cuisine Picker ----
+
+function CuisinePicker({ pickable, selected, expandedRegion, setExpandedRegion, onToggle, className }) {
+  return (
+    <div className={'cuisine-cards' + (className ? ' ' + className : '')}>
+      {pickable.map((region) => {
+        const hasSubs = region.subs && region.subs.length > 0;
+        const regionOn = selected.has(region.key);
+        const expanded = expandedRegion === region.key;
+        const subsOn = hasSubs ? region.subs.filter((s) => selected.has(s.key)) : [];
+        const allSubsOn = hasSubs && subsOn.length === region.subs.length;
+        const someSubsOn = subsOn.length > 0 && !allSubsOn;
+
+        const checkClass = (regionOn || allSubsOn) ? 'on' : someSubsOn ? 'partial' : '';
+
+        return (
+          <div key={region.key} className="cuisine-group">
+            <div className="cuisine-row" onClick={() => onToggle(region.key)}>
+              <span className={'cuisine-check ' + checkClass}>
+                {(regionOn || allSubsOn || someSubsOn) ? '✓' : ''}
+              </span>
+              <span className="cuisine-name">{region.label}</span>
+              {hasSubs && (
+                <span className="cuisine-hint">
+                  {subsOn.length > 0
+                    ? subsOn.map((s) => s.label).join(', ')
+                    : region.subs.slice(0, 2).map((s) => s.label).join(', ') + '…'}
+                </span>
+              )}
+              {hasSubs && (
+                <span
+                  className={'cuisine-chev' + (expanded ? ' open' : '')}
+                  onClick={(e) => { e.stopPropagation(); setExpandedRegion(expanded ? null : region.key); }}
+                >
+                  ▾
+                </span>
+              )}
+            </div>
+            {hasSubs && expanded && (
+              <div className="sub-list">
+                {region.subs.map((sub) => (
+                  <div key={sub.key} className="sub-row" onClick={() => onToggle(sub.key)}>
+                    <span className={'sub-check' + (selected.has(sub.key) ? ' on' : '')}>
+                      {selected.has(sub.key) ? '✓' : ''}
+                    </span>
+                    <span>{sub.label}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -691,47 +713,15 @@ function Settings({ mode, setAppMode, signedIn, status, statusKey, onSignIn, onS
 
       <div className="card set-card">
         <span className="eyebrow">Cuisines</span>
-        <div className="cuisine-cards settings">
-          {pickable.map((region) => {
-            const regionSelected = currentCuisines.has(region.key);
-            const hasSubs = region.subs && region.subs.length > 0;
-            const expanded = expandedRegion === region.key;
-            const someSubsSelected = hasSubs && region.subs.some((s) => currentCuisines.has(s.key));
-
-            return (
-              <div key={region.key} className="cuisine-group">
-                <button
-                  className={'cuisine-card' + (regionSelected || someSubsSelected ? ' selected' : '')}
-                  onClick={() => toggleSettingsCuisine(region.key)}
-                >
-                  <span className="cuisine-label">{region.label}</span>
-                </button>
-                {hasSubs && (regionSelected || someSubsSelected) && (
-                  <button
-                    className="cuisine-expand"
-                    onClick={() => setExpandedRegion(expanded ? null : region.key)}
-                  >
-                    {expanded ? 'Hide' : 'Sub-cuisines'}
-                  </button>
-                )}
-                {hasSubs && expanded && (
-                  <div className="sub-chips">
-                    {region.subs.map((sub) => (
-                      <button
-                        key={sub.key}
-                        className={'sub-chip' + (currentCuisines.has(sub.key) ? ' selected' : '')}
-                        onClick={() => toggleSettingsCuisine(sub.key)}
-                      >
-                        {sub.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-        <p className="lead" style={{ marginTop: 8 }}>Enabling a new cuisine seeds its signature dishes into your catalog.</p>
+        <CuisinePicker
+          className="settings"
+          pickable={pickable}
+          selected={currentCuisines}
+          expandedRegion={expandedRegion}
+          setExpandedRegion={setExpandedRegion}
+          onToggle={toggleSettingsCuisine}
+        />
+        <p className="lead" style={{ marginTop: 8 }}>Enabling a new cuisine seeds its signature dishes into your catalog. Disabling one keeps its dishes in Cook.</p>
       </div>
 
       <div className="card set-card">
