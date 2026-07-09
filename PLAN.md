@@ -30,10 +30,15 @@ A personal Indian meal planner: plan the week's breakfast/lunch/dinner, log
 what was actually eaten (home-cooked vs ordered, with ₹ cost), keep a dish
 catalog with ingredients + optional recipe details, suggest what to cook from
 what's in the kitchen, and track home-vs-out stats and grocery spend.
-**Cuisine is a first-class dimension** (owner requirement, 2026-07-09): every
-dish belongs to a regional Indian cuisine (South Indian, Punjabi, Bengali,
-Marathi, …); the user picks favorite cuisines at first run, can change them in
-Settings, and is asked which cuisine to plan for when filling a day/week.
+**Cuisine and diet are first-class dimensions** (owner requirements,
+2026-07-09): every dish belongs to a regional Indian cuisine — a two-level
+taxonomy where the southern states split out (Tamil Nadu, Kerala, Karnataka,
+Andhra, Telangana, Goan) and Tamil Nadu / Kerala / Karnataka have
+sub-regional cuisines (Chettinad, Malabar, Udupi–Mangalore, …). Every dish is
+also marked veg / egg / non-veg. The user picks a **diet preference** and
+**favorite cuisines** at first run, can change both in Settings, and is asked
+which cuisine to plan for when filling a day/week. Diet is a hard constraint
+everywhere — a vegetarian user must never be suggested a non-veg dish.
 Currency ₹, dates in local time (IST in practice), en-IN formatting.
 
 **Usage assumption (owner-confirmed):** one user, one primary mobile device per
@@ -138,14 +143,19 @@ Types:
 ```js
 // Dish — catalog entry; recipe fields are optional extras on the SAME type.
 { type: 'dish', name: 'Kara Kuzhambu', meal: 'breakfast'|'lunch'|'dinner',
-  cuisine: 'south-indian',                  // key from CUISINES (§4.1); 'other' allowed
+  cuisine: 'tamil-nadu',                    // any key from CUISINES (§4.1) — region
+                                            // OR sub-cuisine key; 'other' allowed
+  diet: 'veg',                              // 'veg' | 'egg' | 'nonveg' (FSSAI trio)
   ingredients: ['tamarind','onion', ...],   // normalized lowercase strings
   tags: ['spicy','one-pot'], ref: '',       // source: book / URL / "Paati"
   notes: '' }                               // free-text prep notes
 
 // Prefs — synced singleton (deterministic id), same pattern as pantry.
 { id: 'prefs', type: 'prefs',
-  cuisines: ['south-indian','punjabi'] }    // favorite cuisines, ≥1; set at onboarding
+  diet: 'veg' | 'veg-egg' | 'all',          // asked explicitly at onboarding
+  cuisines: ['tamil-nadu','kerala:malabar'] } // ≥1; region keys select the whole
+                                              // region, 'region:sub' keys select
+                                              // one sub-cuisine only
 
 // Plan — ONE PER CALENDAR DAY, deterministic id so devices converge.
 { id: 'plan-2026-07-09', type: 'plan', date: '2026-07-09',
@@ -173,50 +183,112 @@ Decisions:
   file: store as a singleton item `{ id: 'pantry', type: 'pantry',
   items: ['rice','toor dal',...] }` so it syncs like everything else.
 
-### 4.1 Cuisines (canonical list)
+### 4.1 Cuisines (canonical two-level taxonomy)
 
-`model.js` exports the data-driven list — adding a cuisine later is one entry
-plus its seed dishes:
+There is no single "South Indian" cuisine — the southern states are top-level
+regions, and Tamil Nadu / Kerala / Karnataka carry sub-regional cuisines.
+`model.js` exports the data-driven tree — adding a region or sub later is one
+entry plus its seed dishes:
 
 ```js
 CUISINES = [
-  { key: 'south-indian', label: 'South Indian' },
-  { key: 'punjabi',      label: 'Punjabi' },
-  { key: 'bengali',      label: 'Bengali' },
-  { key: 'marathi',      label: 'Marathi' },
-  { key: 'gujarati',     label: 'Gujarati' },
-  { key: 'rajasthani',   label: 'Rajasthani' },
-  { key: 'hyderabadi',   label: 'Hyderabadi' },
-  { key: 'kashmiri',     label: 'Kashmiri' },
-  { key: 'other',        label: 'Other' },   // custom dishes only; no seeds, not pickable at onboarding
+  { key: 'tamil-nadu', label: 'Tamil Nadu', subs: [
+      { key: 'tamil-nadu:chettinad', label: 'Chettinad' },
+      { key: 'tamil-nadu:kongunad',  label: 'Kongunad' },
+      { key: 'tamil-nadu:madurai',   label: 'Madurai' },
+      { key: 'tamil-nadu:thanjavur', label: 'Thanjavur / Delta' },
+  ]},
+  { key: 'kerala', label: 'Kerala', subs: [
+      { key: 'kerala:malabar',    label: 'Malabar' },
+      { key: 'kerala:travancore', label: 'Travancore' },
+      { key: 'kerala:central',    label: 'Central Kerala / Kochi' },
+      { key: 'kerala:palakkad',   label: 'Palakkad' },
+  ]},
+  { key: 'karnataka', label: 'Karnataka', subs: [
+      { key: 'karnataka:udupi-mangalore', label: 'Udupi–Mangalore' },
+      { key: 'karnataka:north',           label: 'North Karnataka' },
+      { key: 'karnataka:malnad',          label: 'Malnad' },
+      { key: 'karnataka:kodava',          label: 'Kodava / Coorg' },
+  ]},
+  { key: 'andhra',    label: 'Andhra' },
+  { key: 'telangana', label: 'Telangana', subs: [
+      { key: 'telangana:hyderabadi', label: 'Hyderabadi' },
+  ]},
+  { key: 'goan',      label: 'Goan' },
+  { key: 'punjabi',   label: 'Punjabi' },
+  { key: 'bengali',   label: 'Bengali' },
+  { key: 'marathi',   label: 'Marathi' },
+  { key: 'gujarati',  label: 'Gujarati' },
+  { key: 'rajasthani',label: 'Rajasthani' },
+  { key: 'kashmiri',  label: 'Kashmiri' },
+  { key: 'other',     label: 'Other' },   // custom dishes only; no seeds, not pickable at onboarding
 ]
 ```
 
-### Seeding defaults (per cuisine)
+**Selection semantics** (`model.js#expandCuisines(selectedKeys) -> Set<key>`):
+a region key in `prefs.cuisines` covers the region key **plus all its sub
+keys**; a `region:sub` key covers only that sub **plus the parent region key**
+(region-level dishes are the common base — someone who cooks Chettinad also
+cooks generic Tamil food). All filtering (randomizer, suggestions, Cook
+defaults) goes through this expansion. Dishes may be tagged at either level:
+region for everyday dishes, sub for signature ones.
 
-Seed catalogs live in `model.js` as `SEEDS[cuisineKey] = { breakfast: [...],
-lunch: [...], dinner: [...] }`. **South Indian**: port v1's `DEFAULTS` lists
-verbatim as the baseline (8 breakfast / 9 lunch / 8 dinner — names and
-ingredients from `aduppu.html` lines 407–439), tagged `cuisine:
-'south-indian'`. **Every other cuisine** (all §4.1 keys except `other`): the
-implementer authors ≥5 breakfast / ≥6 lunch / ≥5 dinner authentic, everyday
-home dishes with realistic ingredient lists — e.g. Punjabi: Aloo Paratha,
-Chole, Rajma Chawal, Sarson da Saag with Makki Roti; Bengali: Luchi–Aloor
-Dom, Shukto, Machher Jhol with rice, Cholar Dal; Marathi: Poha, Thalipeeth,
-Varan Bhaat, Pithla Bhakri, Misal. Favor daily home cooking over restaurant
-dishes, and keep ingredient names in the same normalized vocabulary the
-matcher uses (lowercase, singular).
+### 4.2 Diet (veg / egg / non-veg)
 
-**When seeding runs:** seeding is **per cuisine**, triggered at onboarding
-(for each selected cuisine) and again whenever a cuisine is later enabled in
-Settings. For each cuisine, if meta `seeded:<cuisineKey>` is unset: insert
-its seed dishes with **deterministic ids** (`seed-<cuisineKey>-<meal>-<n>`),
-`dirty: 1`, then set the meta flag. Deterministic ids mean two devices that
-both seed produce the same Drive files and converge instead of duplicating.
-A seeded dish the user deletes stays deleted (tombstone syncs; the per-cuisine
-meta flag prevents re-seeding). Disabling a favorite cuisine in Settings does
-NOT delete its dishes — they stay in Cook (filterable) and simply drop out of
-randomizer/suggestion defaults.
+Every dish carries `diet`; the user's `prefs.diet` maps to allowed values:
+
+| `prefs.diet` | Allowed `dish.diet` | Onboarding label |
+|---|---|---|
+| `veg` | `veg` | "Vegetarian" |
+| `veg-egg` | `veg`, `egg` | "Veg + Egg" |
+| `all` | `veg`, `egg`, `nonveg` | "Everything" |
+
+Diet is a **hard filter** in the randomizer, kitchen suggestions, and Cook's
+default view — never relaxed by any fallback. UI marker: the familiar FSSAI
+dot on dish cards, plan chips, and results (green square-dot = veg, yellow =
+egg, red/brown triangle = non-veg) — render as a small inline SVG, not emoji.
+
+### Seeding defaults (per cuisine, diet-aware)
+
+Seed catalogs live in `model.js` as `SEEDS[key] = { breakfast: [...],
+lunch: [...], dinner: [...] }`, keyed by region **and** sub-cuisine keys.
+Every seed dish carries `diet`.
+
+- **Tamil Nadu (region)**: port v1's `DEFAULTS` lists verbatim as the
+  baseline (8 breakfast / 9 lunch / 8 dinner — names and ingredients from
+  `aduppu.html` lines 407–439), tagged `cuisine: 'tamil-nadu'`, all `veg`.
+- **Every other region** (all §4.1 top-level keys except `other`): the
+  implementer authors ≥5 breakfast / ≥6 lunch / ≥5 dinner authentic, everyday
+  home dishes with realistic ingredient lists — e.g. Kerala: Puttu–Kadala,
+  Appam with stew, Sambar, Avial, Thoran, Meen Curry (nonveg), Erissery;
+  Andhra: Pesarattu, Gongura Pachadi with rice, Gutti Vankaya, Chepala Pulusu
+  (nonveg); Punjabi: Aloo Paratha, Chole, Rajma Chawal, Sarson da Saag with
+  Makki Roti, Butter Chicken (nonveg); Bengali: Luchi–Aloor Dom, Shukto,
+  Machher Jhol with rice (nonveg), Cholar Dal; Marathi: Poha, Thalipeeth,
+  Varan Bhaat, Pithla Bhakri, Misal. Include the region's characteristic
+  non-veg staples tagged `nonveg` (and egg dishes tagged `egg`) — the diet
+  filter below decides who receives them. Favor daily home cooking over
+  restaurant dishes; keep ingredient names in the matcher's normalized
+  vocabulary (lowercase, singular).
+- **Every sub-cuisine**: ≥3 signature dishes tagged to the sub key — e.g.
+  Chettinad: Chettinad Chicken (nonveg), Kara Kuzhambu, Vellai Paniyaram;
+  Malabar: Pathiri, Malabar Biryani (nonveg), Kadala Curry; Udupi–Mangalore:
+  Neer Dosa, Goli Baje, Kori Rotti (nonveg). The bulk of a region's food
+  sits at region level; subs add their distinctives.
+
+**When seeding runs:** seeding is **per cuisine key, filtered by the current
+diet preference** — a vegetarian's catalog is never polluted with non-veg
+seeds. Triggered at onboarding (each selected key + its expansion) and again
+when a cuisine is enabled in Settings **or the diet preference widens** (veg
+→ veg-egg → all: re-run seeding for all enabled cuisines; the previously
+skipped egg/non-veg dishes insert now). Track meta `seeded:<key>:<diet>` per
+tier; inserts use **deterministic ids** (`seed-<key>-<meal>-<n>`), `dirty: 1`.
+Deterministic ids mean two devices that both seed produce the same Drive
+files and converge instead of duplicating, and make diet-widening re-runs
+idempotent. A seeded dish the user deletes stays deleted (tombstone syncs).
+Narrowing diet does NOT delete dishes — they drop out of default views via
+the diet filter. Disabling a favorite cuisine likewise keeps its dishes in
+Cook (filterable); they just leave randomizer/suggestion defaults.
 
 ## 5. Core algorithms
 
@@ -240,11 +312,13 @@ local date is used.
 ```js
 NO_REPEAT_DAYS = { breakfast: 2, lunch: 10, dinner: 3 }
 
-pickDish(meal, date, { dishes, plans, logs, exclude = [], cuisines = null })
+pickDish(meal, date, { dishes, plans, logs, exclude = [], cuisines = null, diet = 'all' })
 ```
 
-1. Filter `dishes` to `cuisines` when given (an array of cuisine keys —
-   the day's chosen cuisine, or the user's favorites for "Mix").
+0. **Diet first, and hard**: drop every dish whose `diet` is not allowed by
+   `diet` (§4.2 table). No fallback below ever crosses this line.
+1. Filter the remainder to `expandCuisines(cuisines)` when given (the day's
+   chosen cuisine, or the user's favorites for "Mix").
 2. Build `lastUsed[name]` for this meal: latest date each dish name appears in
    any plan item's `meals[meal]` or any log's `dish` (exact name match) with
    `date < target date`.
@@ -268,7 +342,10 @@ Semantics in the UI:
   `cuisines` = the day's `plan.cuisine` if set, else the favorites.
 
 Tests add: cuisine filtering respected; widening fallback (a) → (b); the
-favorites-mix path draws from multiple cuisines.
+favorites-mix path draws from multiple cuisines; **diet is never violated by
+any fallback** (a veg user with only non-veg dishes for a meal gets `null`,
+not a non-veg pick); region selection includes sub-cuisine dishes and
+sub-only selection includes region-level dishes.
 
 Pure functions over passed-in data — fully unit-testable (test: window
 exclusion per meal type, LRU fallback when pool exhausted, fill-only behavior,
@@ -349,18 +426,30 @@ local-only, show neutral gray `local`, not red** — red is reserved for real
 errors (`offline`, `update app`). `tap to sync` appears only after a previously
 signed-in session loses auth.
 
-### Onboarding: cuisine picker (first run, right after the sign-in gate)
+### Onboarding (first run, right after the sign-in gate — two steps)
 Shown when no `prefs` item exists locally — but for a signed-in user, only
 after the first sync round completes (an existing Drive `prefs` item means
-this device is a reinstall: skip the picker, don't re-ask). Full-screen,
-same visual language as the sign-in screen:
-- Eyebrow "YOUR KITCHEN" + heading "Which cuisines do you cook?" + lead text
-  "Pick your favourites — Aduppu seeds each one with everyday dishes and
-  plans around them. You can change this anytime in Settings."
-- A grid of tappable cuisine cards (all §4.1 keys except `other`), Nisaba
-  `.toggle`/`.seg` styling, multi-select, minimum one to continue.
-- "Continue" → create the `prefs` item, seed each selected cuisine (§4
-  Seeding), land on Today.
+this device is a reinstall: skip onboarding, don't re-ask). Full-screen,
+same visual language as the sign-in screen, step dots at the bottom.
+
+**Step 1 — Diet.** Heading "How do you eat?" with three large cards:
+**Vegetarian** / **Veg + Egg** / **Everything** (§4.2 mapping), each with its
+FSSAI dot. Single-select, explicit — no default preselected; the user must
+tap one to continue.
+
+**Step 2 — Cuisines.** Eyebrow "YOUR KITCHEN" + heading "Which cuisines do
+you cook?" + lead text "Pick your favourites — Aduppu seeds each one with
+everyday dishes and plans around them. You can change this anytime in
+Settings."
+- One tappable card per top-level region (all §4.1 keys except `other`),
+  Nisaba `.toggle`/`.seg` styling, multi-select. Regions with sub-cuisines
+  show a small "e.g. Chettinad, Kongunad…" caption and a chevron that expands
+  an indented row of **sub-cuisine chips**: tapping the region card selects
+  the whole region; expanding and picking specific subs narrows to those
+  (region card then renders in a "partial" state). Minimum one selection
+  (region or sub) to continue.
+- "Continue" → create the `prefs` item (diet + cuisines), seed each selected
+  key per §4 Seeding (diet-filtered), land on Today.
 
 ### Today
 - Date heading (eyebrow `TODAY` + "Thursday, 9 July" display line).
@@ -398,19 +487,24 @@ same visual language as the sign-in screen:
 - Mode toggle pills: **All dishes | From my kitchen**.
 - *All dishes*: meal-type filter chips (All/Breakfast/Lunch/Dinner) plus a
   **cuisine filter** (All + one chip per cuisine that has dishes — favorites
-  first); dish cards grouped by meal with eyebrow headings; card = name +
-  cuisine chip + ingredient preview + tag chips; expands in place (Nisaba
-  task-card pattern) to full ingredients, ref, notes, meal selector, cuisine
-  selector — all inline-editable; ⋯ menu → Delete (Undo toast). Inline **add
-  composer** at top: name + meal select (new dishes default to the user's
-  first favorite cuisine; changeable in the expanded editor), Enter saves,
+  first; sub-cuisines appear indented under their region when the region chip
+  is active). The user's diet is the default view filter, with a quick
+  toggle to reveal excluded dishes (labelled e.g. "Show non-veg") so the
+  catalog is never hidden, just filtered. Dish cards grouped by meal with
+  eyebrow headings; card = FSSAI diet dot + name + cuisine chip + ingredient
+  preview + tag chips; expands in place (Nisaba task-card pattern) to full
+  ingredients, ref, notes, meal selector, cuisine selector, diet selector —
+  all inline-editable; ⋯ menu → Delete (Undo toast). Inline **add composer**
+  at top: name + meal select (new dishes default to the user's first favorite
+  cuisine and `veg`; changeable in the expanded editor), Enter saves,
   expand-to-edit for details.
 - *From my kitchen*: pantry chip input (type + Enter adds a chip, ✕ removes;
   persisted via the `pantry` item), "I have the basics" staples toggle, then
   two sections: **Can cook now** (full matches) and **Almost there** (partial,
-  sorted by score, "Need: …" line). Results default to the favorite cuisines
-  (the same cuisine chips as *All dishes* widen the net). Each result:
-  "Plan it →" (day/meal picker sheet) and "Log it" shortcuts.
+  sorted by score, "Need: …" line). Results respect the diet preference
+  (hard filter) and default to the favorite cuisines (the same cuisine chips
+  as *All dishes* widen the net). Each result: FSSAI dot + "Plan it →"
+  (day/meal picker sheet) and "Log it" shortcuts.
 
 ### Track
 - Range toggle pills: **7 days | This month | All**.
@@ -427,12 +521,16 @@ same visual language as the sign-in screen:
 ### Settings (gear)
 Port Nisaba's Settings structure, minus Note-text card, minus Trash:
 - **Appearance**: Paper / Lights out toggle.
-- **Cuisines**: the same multi-select cuisine chips as onboarding (min 1),
-  editing the synced `prefs` item. Enabling a cuisine that has never been
-  seeded on this account triggers its seeding (§4) with a toast ("Added 16
-  Punjabi dishes to Cook"); disabling one only removes it from randomizer /
-  suggestion defaults — its dishes stay in Cook. Lead text explains exactly
-  that.
+- **Diet**: the same three cards as onboarding Step 1, editing `prefs.diet`.
+  Widening (veg → veg-egg → all) triggers the diet-widening re-seed (§4) with
+  a toast; narrowing just filters — lead text says "Dishes outside your diet
+  are hidden from suggestions, never deleted."
+- **Cuisines**: the same region cards + expandable sub-cuisine chips as
+  onboarding Step 2 (min 1), editing the synced `prefs` item. Enabling a
+  cuisine that has never been seeded on this account triggers its seeding
+  (§4, diet-filtered) with a toast ("Added 16 Punjabi dishes to Cook");
+  disabling one only removes it from randomizer / suggestion defaults — its
+  dishes stay in Cook. Lead text explains exactly that.
 - **Account & sync**: Drive status pill, item count, Connect/Sign out.
 - **App & storage**: install state + Install button (pwaInstall), offline-copy
   persistence row, **Export backup** / **Import backup** buttons (§5.4).
@@ -502,10 +600,13 @@ Same skeleton as Nisaba's `App.jsx`:
   BlockNote).
 - Playwright smoke script (pattern exists from the review session): dev server
   + headless Chromium (`/opt/pw-browsers/chromium`), viewport 390×844:
-  skip sign-in → onboarding picker: select two cuisines (e.g. South Indian +
-  Punjabi) → both cuisines' seeds visible in Cook with cuisine chips → Fill
-  day 🎲 choosing "Punjabi" plans only Punjabi dishes → "Cooked this ✓" on
-  Today → log an ordered meal with cost → Track shows correct stats → dark
+  skip sign-in → onboarding step 1: pick "Vegetarian" → step 2: select Tamil
+  Nadu (whole region) + Kerala → Malabar (sub only) → Cook shows seeds from
+  both, all veg (no non-veg seeded), with cuisine chips and FSSAI dots →
+  Fill day 🎲 choosing "Kerala" plans only Kerala/Malabar veg dishes →
+  "Cooked this ✓" on Today → log an ordered meal with cost → Track shows
+  correct stats → Settings: widen diet to "Everything" → non-veg dishes
+  appear in Cook after the re-seed toast → dark
   mode → screenshots of all five screens. Attach screenshots to the PR/summary.
 - Manual checklist in the summary for the owner (things only they can do):
   1. Google Cloud: new project `Aduppu`, enable Drive API, consent screen →
