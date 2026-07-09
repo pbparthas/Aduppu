@@ -16,6 +16,13 @@
 ## 0. Ground rules
 
 - **Branch**: develop on `claude/meal-planner-review-8yy67r` in `pbparthas/Aduppu`, push there.
+- **FIRST TASK — remove the stale v2 implementation.** Commit `eb2521d`
+  ("Implement Aduppu v2: full PWA redesign with Firebase…") on this branch
+  was produced by an old session against the superseded Firebase plan and
+  contradicts this document. Before anything else, `git revert eb2521d`
+  (keeps it recoverable in history), which removes `index.html`, `css/`,
+  `js/`, and restores `sw.js`. None of its code is to be reused — this plan's
+  architecture (Nisaba pattern, no Firebase) replaces it entirely.
 - **Reference**: `git clone --depth 1 https://github.com/pbparthas/nisaba` and port
   from `nisaba/app`, `nisaba/worker`, `nisaba/docs`, `.github/workflows/deploy-pages.yml`.
 - Plain JavaScript (no TypeScript), ESM, React 19 function components — matching Nisaba.
