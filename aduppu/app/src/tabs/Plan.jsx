@@ -10,29 +10,6 @@ const MEALS = ['breakfast', 'lunch', 'dinner'];
 const MEAL_LABELS = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner' };
 const DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-const ACCENT = '#b5541c';
-const ACCENT_LIGHT = '#f5ebe3';
-const BORDER = '#e5e0d8';
-const MUTED = '#999';
-const INK = '#333';
-
-const MEAL_CHIP_COLORS = {
-  breakfast: { bg: '#fef3c7', text: '#92400e' },
-  lunch:    { bg: ACCENT_LIGHT, text: ACCENT },
-  dinner:   { bg: '#e8e5e0', text: '#555' },
-};
-
-const INPUT_STYLE = {
-  padding: '8px 10px',
-  border: `1px solid ${BORDER}`,
-  borderRadius: 6,
-  fontSize: '0.875rem',
-  fontFamily: 'Inter, sans-serif',
-  outline: 'none',
-  width: '100%',
-  boxSizing: 'border-box',
-};
-
 /* ── helpers ───────────────────────────────────────────── */
 
 function getDayAbbr(dateStr) {
@@ -64,29 +41,25 @@ function DietDot({ diet }) {
   if (!diet) return null;
   if (diet === 'nonveg') {
     return (
-      <svg width="10" height="10" viewBox="0 0 10 10"
-        style={{ verticalAlign: 'middle', marginRight: 4, flexShrink: 0 }}>
-        <polygon points="5,0.5 9.5,9.5 0.5,9.5" fill="#8B4513" />
-      </svg>
+      <span className="diet-dot nonveg">
+        <svg viewBox="0 0 10 10">
+          <polygon points="5,0.5 9.5,9.5 0.5,9.5" fill="currentColor" />
+        </svg>
+      </span>
     );
   }
-  const color = diet === 'egg' ? '#DAA520' : '#228B22';
   return (
-    <svg width="10" height="10" viewBox="0 0 10 10"
-      style={{ verticalAlign: 'middle', marginRight: 4, flexShrink: 0 }}>
-      <circle cx="5" cy="5" r="4.5" fill={color} />
-    </svg>
+    <span className={`diet-dot ${diet}`}>
+      <svg viewBox="0 0 10 10">
+        <circle cx="5" cy="5" r="4.5" fill="currentColor" />
+      </svg>
+    </span>
   );
 }
 
 function MealChip({ meal }) {
-  const c = MEAL_CHIP_COLORS[meal];
   return (
-    <span style={{
-      display: 'inline-block', padding: '2px 10px', borderRadius: 10,
-      fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase',
-      letterSpacing: '0.04em', backgroundColor: c.bg, color: c.text,
-    }}>
+    <span className={`chip ${meal}`}>
       {MEAL_LABELS[meal]}
     </span>
   );
@@ -287,23 +260,15 @@ export default function Plan({
   /* ── render ────────────────────────────────────────── */
 
   return (
-    <div style={{ padding: 16, maxWidth: 640, margin: '0 auto' }}>
+    <div className="screen">
 
       {/* ── Week navigation ──────────────────────── */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 4, marginBottom: 16,
-      }}>
-        <button
-          onClick={() => changeWeek(-1)}
-          style={{
-            border: 'none', background: 'none', cursor: 'pointer',
-            fontSize: '1.2rem', color: INK, padding: '4px 8px',
-          }}
-        >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 16 }}>
+        <button className="btn ghost" onClick={() => changeWeek(-1)}>
           ‹
         </button>
 
-        <div style={{ display: 'flex', flex: 1, gap: 2, justifyContent: 'center' }}>
+        <div className="seg" style={{ flex: 1, justifyContent: 'center' }}>
           {days.map(day => {
             const isToday = day === today;
             const isSelected = day === selectedDay;
@@ -311,27 +276,20 @@ export default function Plan({
             return (
               <button
                 key={day}
+                className={isSelected ? 'on' : ''}
                 onClick={() => setSelectedDay(day)}
                 style={{
-                  flex: 1, display: 'flex', flexDirection: 'column',
-                  alignItems: 'center', padding: '6px 2px', borderRadius: 10,
-                  border: 'none', cursor: 'pointer',
-                  backgroundColor: isSelected ? ACCENT
-                    : isToday ? ACCENT_LIGHT : 'transparent',
-                  color: isSelected ? '#fff' : isPast ? MUTED : INK,
-                  opacity: isPast && !isSelected ? 0.6 : 1,
-                  fontFamily: 'Inter, sans-serif',
-                  transition: 'background-color 0.15s',
+                  flex: 1,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  opacity: isPast && !isSelected ? 0.5 : 1,
                 }}
               >
-                <span style={{
-                  fontSize: '0.65rem', fontWeight: 600, textTransform: 'uppercase',
-                }}>
+                <span style={{ fontSize: '0.65rem', textTransform: 'uppercase' }}>
                   {getDayAbbr(day)}
                 </span>
-                <span style={{
-                  fontSize: '0.9rem', fontWeight: isToday ? 700 : 500,
-                }}>
+                <span style={{ fontWeight: isToday ? 800 : 500 }}>
                   {getDayNum(day)}
                 </span>
               </button>
@@ -339,34 +297,21 @@ export default function Plan({
           })}
         </div>
 
-        <button
-          onClick={() => changeWeek(1)}
-          style={{
-            border: 'none', background: 'none', cursor: 'pointer',
-            fontSize: '1.2rem', color: INK, padding: '4px 8px',
-          }}
-        >
+        <button className="btn ghost" onClick={() => changeWeek(1)}>
           ›
         </button>
       </div>
 
       {/* ── Selected day header ──────────────────── */}
-      <div style={{
-        marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8,
-      }}>
-        <span style={{
-          fontSize: '1.1rem', fontWeight: 600, color: INK,
-          fontFamily: '"Saira Condensed", sans-serif',
-        }}>
+      <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span className="disp" style={{ fontSize: '1.1rem', fontWeight: 600 }}>
           {dayLabel(selectedDay)}
         </span>
         {selPlan?.cuisine && (
-          <span style={{
-            display: 'inline-flex', alignItems: 'center', gap: 4,
-            padding: '2px 8px', borderRadius: 10,
-            backgroundColor: ACCENT_LIGHT, color: ACCENT,
-            fontSize: '0.7rem', fontWeight: 600,
-          }}>
+          <span
+            className="chip cuisine"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+          >
             {cuisineLabel(selPlan.cuisine)}
             <span
               onClick={() => removeCuisine(selectedDay)}
@@ -390,13 +335,8 @@ export default function Plan({
         const diet = getDiet(planned);
 
         return (
-          <div key={meal} style={{
-            backgroundColor: '#fff', border: `1px solid ${BORDER}`,
-            borderRadius: 10, padding: 12, marginBottom: 10,
-          }}>
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-            }}>
+          <div key={meal} className="card" style={{ marginBottom: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <MealChip meal={meal} />
               {planned && !isEditing && <DietDot diet={diet} />}
 
@@ -413,15 +353,26 @@ export default function Plan({
                         if (e.key === 'Escape') cancelEdit();
                       }}
                       onBlur={() => setTimeout(commitEdit, 200)}
-                      style={{ ...INPUT_STYLE, padding: '4px 8px' }}
+                      style={{
+                        padding: '4px 8px',
+                        border: '1px solid var(--line)',
+                        borderRadius: 6,
+                        fontSize: '0.875rem',
+                        outline: 'none',
+                        width: '100%',
+                        boxSizing: 'border-box',
+                        background: 'var(--card)',
+                        color: 'var(--ink)',
+                      }}
                     />
                     {suggestions.length > 0 && (
                       <div style={{
                         position: 'absolute', top: '100%', left: 0, right: 0,
-                        backgroundColor: '#fff', border: `1px solid ${BORDER}`,
+                        background: 'var(--card)',
+                        border: '1px solid var(--line)',
                         borderRadius: 6, zIndex: 10, maxHeight: 200,
                         overflowY: 'auto',
-                        boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+                        boxShadow: 'var(--shadow)',
                       }}>
                         {suggestions.map(d => (
                           <div
@@ -436,7 +387,7 @@ export default function Plan({
                               padding: '6px 10px', cursor: 'pointer',
                               fontSize: '0.85rem',
                               display: 'flex', alignItems: 'center', gap: 4,
-                              borderBottom: `1px solid ${BORDER}`,
+                              borderBottom: '1px solid var(--line)',
                             }}
                           >
                             <DietDot diet={d.diet} />
@@ -451,7 +402,7 @@ export default function Plan({
                     onClick={() => startEdit(selectedDay, meal, planned)}
                     style={{
                       cursor: 'pointer', fontSize: '0.9rem',
-                      color: planned ? INK : MUTED,
+                      color: planned ? 'var(--ink)' : 'var(--muted)',
                       fontWeight: planned ? 500 : 400,
                     }}
                   >
@@ -463,8 +414,8 @@ export default function Plan({
               {/* "had this" indicator */}
               {logged && (
                 <span style={{
-                  fontSize: '0.7rem', color: '#16a34a', fontWeight: 600,
-                  whiteSpace: 'nowrap',
+                  fontSize: '0.7rem', color: 'var(--success)',
+                  fontWeight: 600, whiteSpace: 'nowrap',
                 }}>
                   ✓ had this
                 </span>
@@ -472,28 +423,23 @@ export default function Plan({
 
               {/* Reroll */}
               <button
+                className="btn ghost"
                 onClick={() => rerollSlot(selectedDay, meal)}
                 title="Reroll"
-                style={{
-                  border: 'none', background: 'none', cursor: 'pointer',
-                  fontSize: '1rem', padding: '4px',
-                }}
+                style={{ fontSize: '1rem', padding: 4 }}
               >
                 🎲
               </button>
 
               {/* Pick from catalog */}
               <button
+                className="btn ghost"
                 onClick={() => {
                   setShowPicker({ day: selectedDay, meal });
                   setPickerSearch('');
                 }}
                 title="Pick from catalog"
-                style={{
-                  border: 'none', background: 'none', cursor: 'pointer',
-                  fontSize: '0.8rem', color: ACCENT, padding: '4px',
-                  fontWeight: 600,
-                }}
+                style={{ fontSize: '0.8rem', padding: 4 }}
               >
                 📋
               </button>
@@ -503,80 +449,57 @@ export default function Plan({
       })}
 
       {/* ── Fill buttons ─────────────────────────── */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 24 }}>
+      <div className="btn-row" style={{ marginBottom: 24 }}>
         <button
+          className="btn accent"
+          style={{ flex: 1 }}
           onClick={() => setShowCuisineAsk({ mode: 'day', day: selectedDay })}
-          style={{
-            flex: 1, padding: '10px 0',
-            border: `1px solid ${ACCENT}`, borderRadius: 10,
-            backgroundColor: ACCENT_LIGHT, color: ACCENT,
-            fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer',
-            fontFamily: 'Inter, sans-serif',
-          }}
         >
           Fill day 🎲
         </button>
         <button
+          className="btn accent"
+          style={{ flex: 1 }}
           onClick={() => setShowCuisineAsk({ mode: 'week' })}
-          style={{
-            flex: 1, padding: '10px 0',
-            border: `1px solid ${ACCENT}`, borderRadius: 10,
-            backgroundColor: ACCENT_LIGHT, color: ACCENT,
-            fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer',
-            fontFamily: 'Inter, sans-serif',
-          }}
         >
           Fill week 🎲
         </button>
       </div>
 
       {/* ── Week overview ────────────────────────── */}
-      <div style={{
-        fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase',
-        letterSpacing: '0.1em', color: MUTED, marginBottom: 8,
-      }}>
-        Week overview
-      </div>
+      <span className="eyebrow" style={{ marginBottom: 8 }}>Week overview</span>
 
-      <div style={{
-        backgroundColor: '#fff', border: `1px solid ${BORDER}`,
-        borderRadius: 10, overflow: 'hidden',
-      }}>
-        {days.map((day, i) => {
+      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+        {days.map(day => {
           const plan = getPlan(day);
           const isPast = day < today;
           const isToday = day === today;
           return (
             <div
               key={day}
+              className={`week-row${isToday ? ' today' : ''}`}
               onClick={() => setSelectedDay(day)}
               style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                padding: '8px 12px', cursor: 'pointer',
-                borderBottom: i < 6 ? `1px solid ${BORDER}` : 'none',
-                backgroundColor: isToday ? '#fdfcfa' : 'transparent',
+                padding: '8px 12px',
+                cursor: 'pointer',
                 opacity: isPast ? 0.5 : 1,
+                ...(isToday ? { background: 'var(--accent-wash)' } : {}),
               }}
             >
-              <span style={{
-                minWidth: 46, fontSize: '0.75rem', fontWeight: 600,
-                color: isToday ? ACCENT : INK, whiteSpace: 'nowrap',
-              }}>
+              <span className="day-name" style={{ minWidth: 46, whiteSpace: 'nowrap' }}>
                 {getDayAbbr(day)} {getDayNum(day)}
               </span>
 
-              <div style={{ flex: 1, display: 'flex', gap: 4 }}>
+              <div className="meals">
                 {MEALS.map(meal => {
                   const name = plan?.meals?.[meal] || '';
                   return (
                     <span key={meal} style={{
                       flex: 1, fontSize: '0.7rem',
-                      color: name ? INK : '#ccc',
+                      color: name ? 'var(--ink)' : 'var(--muted)',
                       overflow: 'hidden', textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap', padding: '2px 4px',
                       borderRadius: 4,
-                      backgroundColor: name
-                        ? MEAL_CHIP_COLORS[meal].bg : 'transparent',
                     }}>
                       {name || '—'}
                     </span>
@@ -585,11 +508,7 @@ export default function Plan({
               </div>
 
               {plan?.cuisine && (
-                <span style={{
-                  fontSize: '0.6rem', padding: '1px 6px', borderRadius: 8,
-                  backgroundColor: ACCENT_LIGHT, color: ACCENT,
-                  fontWeight: 600, whiteSpace: 'nowrap',
-                }}>
+                <span className="chip cuisine">
                   {cuisineLabel(plan.cuisine)}
                 </span>
               )}
@@ -600,42 +519,16 @@ export default function Plan({
 
       {/* ── Cuisine ask bottom sheet ─────────────── */}
       {showCuisineAsk && (
-        <div
-          onClick={() => setShowCuisineAsk(null)}
-          style={{
-            position: 'fixed', inset: 0,
-            backgroundColor: 'rgba(0,0,0,0.3)', zIndex: 100,
-            display: 'flex', alignItems: 'flex-end',
-            justifyContent: 'center',
-          }}
-        >
-          <div
-            onClick={e => e.stopPropagation()}
-            style={{
-              backgroundColor: '#fff',
-              borderRadius: '16px 16px 0 0',
-              padding: '24px 20px',
-              maxWidth: 640, width: '100%',
-              paddingBottom: 'max(24px, env(safe-area-inset-bottom))',
-            }}
-          >
-            <div style={{
-              fontSize: '1rem', fontWeight: 600, color: INK, marginBottom: 16,
-            }}>
+        <div className="overlay" onClick={() => setShowCuisineAsk(null)}>
+          <div className="panel" onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: '1rem', fontWeight: 600 }}>
               What are we cooking?
             </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              {/* "Mix" is pre-focused (autoFocus) */}
+            <div className="seg wrap">
               <button
+                className="on"
                 autoFocus
                 onClick={() => handleCuisineChoice('mix')}
-                style={{
-                  padding: '8px 16px', borderRadius: 20,
-                  border: `2px solid ${ACCENT}`,
-                  backgroundColor: ACCENT_LIGHT, color: ACCENT,
-                  fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer',
-                  fontFamily: 'Inter, sans-serif',
-                }}
               >
                 Mix
               </button>
@@ -643,13 +536,6 @@ export default function Plan({
                 <button
                   key={key}
                   onClick={() => handleCuisineChoice(key)}
-                  style={{
-                    padding: '8px 16px', borderRadius: 20,
-                    border: `1px solid ${BORDER}`,
-                    backgroundColor: '#fff', color: INK,
-                    fontWeight: 400, fontSize: '0.85rem', cursor: 'pointer',
-                    fontFamily: 'Inter, sans-serif',
-                  }}
                 >
                   {cuisineLabel(key)}
                 </button>
@@ -661,49 +547,33 @@ export default function Plan({
 
       {/* ── Dish picker bottom sheet ─────────────── */}
       {showPicker && (
-        <div
-          onClick={() => setShowPicker(null)}
-          style={{
-            position: 'fixed', inset: 0,
-            backgroundColor: 'rgba(0,0,0,0.3)', zIndex: 100,
-            display: 'flex', alignItems: 'flex-end',
-            justifyContent: 'center',
-          }}
-        >
+        <div className="overlay" onClick={() => setShowPicker(null)}>
           <div
+            className="panel"
             onClick={e => e.stopPropagation()}
-            style={{
-              backgroundColor: '#fff',
-              borderRadius: '16px 16px 0 0',
-              padding: '20px 20px',
-              maxWidth: 640, width: '100%',
-              maxHeight: '70vh',
-              display: 'flex', flexDirection: 'column',
-              paddingBottom: 'max(20px, env(safe-area-inset-bottom))',
-            }}
+            style={{ maxHeight: '70vh' }}
           >
-            <div style={{
-              fontSize: '1rem', fontWeight: 600, color: INK, marginBottom: 12,
-            }}>
+            <div style={{ fontSize: '1rem', fontWeight: 600 }}>
               Pick a dish — {MEAL_LABELS[showPicker.meal]}
             </div>
 
-            <input
-              autoFocus
-              placeholder="Search dishes..."
-              value={pickerSearch}
-              onChange={e => setPickerSearch(e.target.value)}
-              style={{ ...INPUT_STYLE, marginBottom: 12 }}
-            />
+            <div className="search">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="2" strokeLinecap="round">
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.3-4.3" />
+              </svg>
+              <input
+                autoFocus
+                placeholder="Search dishes..."
+                value={pickerSearch}
+                onChange={e => setPickerSearch(e.target.value)}
+              />
+            </div>
 
             <div style={{ flex: 1, overflowY: 'auto' }}>
               {pickerDishes.length === 0 ? (
-                <div style={{
-                  padding: 20, textAlign: 'center',
-                  color: MUTED, fontSize: '0.85rem',
-                }}>
-                  No dishes found
-                </div>
+                <div className="empty">No dishes found</div>
               ) : (
                 pickerDishes.map(d => (
                   <div
@@ -715,17 +585,15 @@ export default function Plan({
                     style={{
                       display: 'flex', alignItems: 'center', gap: 8,
                       padding: '10px 8px', cursor: 'pointer',
-                      borderBottom: `1px solid ${BORDER}`,
+                      borderBottom: '1px solid var(--line)',
                     }}
                   >
                     <DietDot diet={d.diet} />
-                    <span style={{
-                      flex: 1, fontSize: '0.875rem', color: INK,
-                    }}>
+                    <span style={{ flex: 1, fontSize: '0.875rem' }}>
                       {d.name}
                     </span>
                     {d.cuisine && (
-                      <span style={{ fontSize: '0.65rem', color: MUTED }}>
+                      <span className="chip cuisine">
                         {cuisineLabel(d.cuisine)}
                       </span>
                     )}
