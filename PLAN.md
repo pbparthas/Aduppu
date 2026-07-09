@@ -455,6 +455,15 @@ app deployed. Both are specced here so no re-design is needed.
 Take a photo of ingredients/shelf/fridge; a vision model extracts an
 ingredient list that prefills the pantry chips in Cook → "From my kitchen".
 
+**This is the ONLY AI-dependent feature in the app** — everything else
+(randomizer, matching, shopping list) is deterministic code. Keep the
+provider fully swappable: the app contract is only `POST /vision` →
+`{ ingredients: string[] }`, and the model call must live in one function in
+the Worker (`callVisionModel(image, mediaType) -> string[]`) so switching to
+another vision-capable LLM (Gemini, OpenAI, self-hosted) is a one-function
+edit plus a secret swap. If no vision secret is configured, return 501 —
+the app hides the scan button and works fully without AI.
+
 **Architecture:** the browser never holds an AI API key. Add one endpoint to
 the existing auth Worker (`aduppu/worker`), which already holds secrets and
 allowlists origins:
