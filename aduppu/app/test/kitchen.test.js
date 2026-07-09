@@ -8,8 +8,8 @@ describe('normalize', () => {
 
   it('strips trailing s per word (plural insensitivity)', () => {
     expect(normalize('tomatoes')).toBe('tomato');
-    // normalize only strips trailing 's', not 'ves' -> 'f'
-    expect(normalize('curry leaves')).toBe('curry leave');
+    expect(normalize('onions')).toBe('onion');
+    expect(normalize('mustard seeds')).toBe('mustard seed');
   });
 
   it('collapses multiple spaces', () => {
