@@ -111,7 +111,8 @@ export default function Plan({
   // Current week's day strings [Mon..Sun]
   const days = useMemo(() => weekDates(weekAnchor), [weekAnchor]);
 
-  const favCuisines = prefsItem?.cuisines || [];
+  const allFavCuisines = prefsItem?.cuisines || [];
+  const favCuisines = allFavCuisines.filter(k => !k.includes(':'));
 
   /* ── lookups ───────────────────────────────────────── */
 

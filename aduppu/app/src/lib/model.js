@@ -575,51 +575,54 @@ export const SEEDS = {
 // ---------------------------------------------------------------------------
 // Seeding function
 // ---------------------------------------------------------------------------
-export function seedCuisine(cuisineKey, diet, existingItems = []) {
+export async function seedCuisine(store, cuisineKey, diet) {
   const catalog = SEEDS[cuisineKey];
-  if (!catalog) return [];
+  if (!catalog) return 0;
 
   const allowedDiets = new Set(DIET_ALLOWED[diet] || DIET_ALLOWED.all);
+  const existingItems = await store.allItems();
 
   // Check if already seeded at this diet tier
   const metaKey = `seeded:${cuisineKey}:${diet}`;
   const alreadySeeded = existingItems.some(
     (item) => item.type === 'meta' && item.id === metaKey
   );
-  if (alreadySeeded) return [];
+  if (alreadySeeded) return 0;
 
-  const newItems = [];
   const existingIds = new Set(existingItems.map((i) => i.id));
+  let count = 0;
 
   for (const mealType of ['breakfast', 'lunch', 'dinner']) {
     const dishes = catalog[mealType] || [];
-    dishes.forEach((dish, n) => {
-      if (!allowedDiets.has(dish.diet)) return;
+    for (let n = 0; n < dishes.length; n++) {
+      const dish = dishes[n];
+      if (!allowedDiets.has(dish.diet)) continue;
       const id = `seed-${cuisineKey}-${mealType}-${n}`;
-      if (existingIds.has(id)) return; // already exists (idempotent)
-      newItems.push({
+      if (existingIds.has(id)) continue;
+      await store.putItem({
         id,
         type: 'dish',
         name: dish.name,
-        meal: dish.meal,
-        cuisine: dish.cuisine,
+        meal: mealType,
+        cuisine: dish.cuisine || cuisineKey,
         diet: dish.diet,
-        ingredients: dish.ingredients,
-        tags: dish.tags,
-        ref: dish.ref,
-        notes: dish.notes,
+        ingredients: dish.ingredients || [],
+        tags: dish.tags || [],
+        ref: dish.ref || '',
+        notes: dish.notes || '',
         deleted: false,
         deleted_at: null,
         created_at: Date.now(),
         updated_at: Date.now(),
         dirty: 1,
       });
-    });
+      count++;
+    }
   }
 
   // Add a meta marker so re-seeding is idempotent
-  if (newItems.length > 0) {
-    newItems.push({
+  if (count > 0) {
+    await store.putItem({
       id: metaKey,
       type: 'meta',
       key: metaKey,
@@ -632,7 +635,7 @@ export function seedCuisine(cuisineKey, diet, existingItems = []) {
     });
   }
 
-  return newItems;
+  return count;
 }
 
 // ---------------------------------------------------------------------------
