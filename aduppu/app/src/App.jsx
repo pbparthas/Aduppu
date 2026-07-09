@@ -72,7 +72,7 @@ function groupByDate(items) {
 // The owner's OAuth Client ID (public by design -- it only identifies the app
 // to Google; access still requires signing in to the matching account).
 // Empty by default -- shows SetupScreen until the owner bakes one in.
-const DEFAULT_CLIENT_ID = '';
+const DEFAULT_CLIENT_ID = '934726535844-mu79uunbbckj8v67i3gb5vk619grn86o.apps.googleusercontent.com';
 
 /* Aduppu mark -- a stroke-based SVG clay pot on three hearth stones with a
    three-tongue flame above, in accent. Legible at 16px. Uses currentColor
