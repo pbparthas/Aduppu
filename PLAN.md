@@ -772,3 +772,138 @@ an Undo toast covering the whole batch.
 scheduled notifications without a push server (out of scope; the Worker could
 host Web Push later if the owner asks). The checklist + badge is the v1
 reminder surface.
+
+## 14. v3.1 — View-layer rebuild (UI/UX overhaul; owner-directed, 2026-07-10)
+
+Read `UIUX-REVIEW.md` first — it is the evidence base for this section and
+lists every finding (A1–A15, B1–B11, C, D) referenced below. **Scope: rebuild
+`aduppu/app/src/tabs/*` and the render layer of `App.jsx` against this spec.
+Do NOT touch `lib/` logic except the two directed changes in §14.5.**
+Data model, sync, Worker, tests for lib/ all stay.
+
+### 14.1 Non-negotiable ground rules
+
+1. **Zero inline `style={{...}}` in tabs** except truly dynamic values
+   (e.g. a computed width). Every visual pattern gets a class in
+   `styles.css`. If a style is needed twice, it is a class.
+2. **One shared component set** in `src/components/` — no per-tab copies of
+   anything. Minimum set:
+   - `DietDot` (the FSSAI bordered-square variant, 3 sizes) — used by ALL tabs.
+   - `Chip` (meal / cuisine / mode variants), `IconButton` (44px min target),
+     `Sheet` (bottom sheet with title, close affordance, safe-area padding),
+     `Toast` (single system app-wide: text + optional Undo, queue of one,
+     positioned above the tab bar, never overlapping interactive content),
+     `EmptyState`, `SegRow`, `Composer` (labelled-field stack with explicit
+     Save/Cancel), `DishName` (2-line clamp + full name on tap via Sheet).
+   - Real stroke SVG icons for die and list-picker (no emoji anywhere).
+3. **One editing model everywhere**: tapping an entry opens a **bottom Sheet**
+   with labelled fields and explicit **Save / Cancel / Delete** (Delete via
+   `deleteWithUndo`). No save-on-blur anywhere. No fake buttons (A6).
+4. **Destructive actions always undoable**: plan-slot clear, day clear, week
+   clear all go through the undo toast (restore previous `meals`/`cuisine`).
+5. Every tap target ≥ 44×44px; interactive rows are `<button>`s; visible
+   focus states; ARIA labels on icon-only buttons.
+6. Tabs render a plain `<div>` (App owns the single `<main className="screen">`)
+   — fixes A2.
+
+### 14.2 App shell fixes
+
+- **Status pill (A1)**: in local-only mode show neutral gray `local`; never
+  schedule sync when not signed in (`saveItem` gates `engine.schedule()` on
+  `auth.isSignedIn()`). Red is reserved for real errors. `tap to sync`
+  appears only for a previously-signed-in session that lost auth, and IS
+  tappable (calls `signIn`).
+- Single Toast host in App; tabs receive `showToast(msg, undoFn?)`.
+- Date heading drops to 17px/600 (stops competing with the wordmark).
+
+### 14.3 Per-screen redlines
+
+**Onboarding** — add step dots (1/2); center content column; region row tap
+= expand/collapse when subs exist (selection via the checkbox only — fixes
+B7); sub-only selection renders the parent checkbox in a distinct *partial*
+state (minus-square, not ✓ — fixes A11); same component reused in Settings.
+
+**Today** (the daily screen — optimize for glance + log):
+- Hero = the meal cards, not a Fill button. "Fill day" becomes a compact
+  secondary button in the header row and **opens the cuisine-ask sheet**
+  (A12) exactly like Plan's.
+- Meal card layout: chip row (meal chip + DietDot + cuisine chip if the
+  day has one), dish name on its own line via `DishName` (fixes A13),
+  action row: **`Cooked this ✓` as a real button** (primary, success-tinted;
+  shows whenever the planned dish has no matching log — fixes A5/B1),
+  overflow row of icon buttons (reroll, pick from catalog, clear-with-undo).
+- Logged entries: same row component as Track (one source of truth); tap →
+  edit Sheet (14.1.3).
+- Summary strip: natural sentence — "2 cooked · 1 ordered · ₹120 spent"
+  (fixes A14).
+
+**Plan**:
+- Week strip: 7 equal pills that FIT 390px (no arrows in the row — swipe or
+  compact ‹ › above it; verify at 360px too; fixes A3).
+- Slot rows use the same card anatomy as Today. Inline free-text edit is
+  replaced by the **catalog picker Sheet with a search field**; typing a name
+  not in the catalog offers "Use '<text>'" as an explicit choice (fixes A9)
+  and, when chosen, opens the minimal new-dish sheet (name+meal prefilled,
+  cuisine/diet pickable) so phantom dishes never enter the data.
+- "✓ had this" only when a log's dish matches the planned dish (A4);
+  otherwise show a neutral "logged: <dish>" line.
+- Fill/Clear: Fill day + Fill week side by side; Clear actions inside an
+  overflow menu, undoable (A8).
+- Week overview: two-line rows (day + cuisine chip on line 1; three
+  ellipsized dish names with meal initials on line 2), chevron affordance.
+
+**Cook**:
+- Browsing list stays; the expanded in-place editor is replaced by an
+  **edit Sheet** (B3) with the standard editing model. Card tap = Sheet.
+- Filters: one horizontal scroll row — All / regions (subs appear as a second
+  row only while their region is active).
+- Kitchen mode: "Log it" opens the standard log Sheet pre-filled (meal from
+  dish, mode=home) instead of writing silently (B4); result rows show *what
+  matched* ("have 5 of 6").
+
+**Track**:
+- One mental model: the range seg (Last 7 days / Last 30 days / All — honest
+  labels, A7) governs stats AND the log list. The calendar becomes an
+  optional collapsed "Pick a date" affordance, not the primary browser.
+- Log rows: same component as Today; edit via Sheet (fixes A6).
+- Grocery composer: amount first (autofocus, numeric), note, date (defaults
+  today, collapsed behind "change date"); disabled Add until amount valid.
+
+**Settings** — unchanged except: shared CuisinePicker (with partial state),
+diet cards horizontal compact row, and the pill/status fixes from 14.2.
+
+### 14.4 Seed-data QA pass (blocks release — see review §D)
+
+Audit all seeds for: correct cuisine (no North-Indian staples tagged Tamil
+Nadu), correct meal slots, correct diet tags, plausible ingredient lists,
+and a **normalized ingredient vocabulary** (one canonical name per
+ingredient across every dish: "rice", "idli rice", "rice flour" are three
+distinct deliberate ingredients; "black chickpea" vs "kadala" are not).
+Maintain the canonical vocabulary list in `model.js` and add a test that
+every seed ingredient is in it.
+
+### 14.5 The only two lib/ changes allowed
+
+1. `kitchen.js`: add a small alias map into `normalize()` (e.g. kadala→black
+   chickpea, jeera→cumin) and a `have M of N` count in `matchDish`'s result —
+   needed for A10/Kitchen result rows. Update tests.
+2. None other. If a redline seems to require a lib change, stop and flag it.
+
+### 14.6 Acceptance checklist (all required before "done")
+
+- [ ] `npm test` green; `npm run build` clean.
+- [ ] Zero emoji glyphs in the UI; zero inline styles in tabs (grep
+      `style={{` — allowed only with a `/* dynamic */` comment).
+- [ ] One DietDot, one Toast, one editing model — verified by grep (no
+      duplicate component definitions).
+- [ ] Playwright walkthrough at **390×844 AND 360×780**, both themes,
+      screenshotting: sign-in, both onboarding steps (incl. partial
+      sub-selection state), Today (planned/logged/composer), Plan (week
+      strip fits, cuisine ask, picker sheet), Cook (list, edit sheet,
+      kitchen results showing "have M of N"), Track (ranges, edit sheet),
+      Settings. Attach all screenshots to the summary.
+- [ ] Kitchen smoke test: pantry = rice, urad dal, coconut, onion, tomato,
+      toor dal + staples ON ⇒ "Can cook now" is non-empty (Idli or Dosa
+      present).
+- [ ] Local-only mode shows gray `local` pill on every screen.
+- [ ] Sunday reachable in the Plan week strip at 360px.
