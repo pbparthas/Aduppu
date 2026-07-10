@@ -32,6 +32,8 @@ export default function Track({
   const [groceryNote, setGroceryNote]       = useState('');
   const [editingLogId, setEditingLogId]     = useState(null);
   const [editingGroceryId, setEditingGroceryId] = useState(null);
+  const [calendarMonth, setCalendarMonth]     = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; });
+  const [selectedLogDate, setSelectedLogDate] = useState(() => localDateStr());
 
   // Long-press timer for multi-select
   const longPressTimer = useRef(null);
@@ -258,41 +260,97 @@ export default function Track({
         </div>
       </div>
 
-      {/* -- Meal log -- */}
+      {/* -- Meal log (calendar view) -- */}
       <div className="section">
         <span className="eyebrow">Meal Log</span>
 
-        {sortedLogDates.map((date) => (
-          <div key={date} style={{ marginTop: 14 }}>
-            <span className="eyebrow">{dayLabel(date)}</span>
-            <div className="list">
-              {logsByDate[date].map((log) => (
-                <LogRow
-                  key={log.id}
-                  log={log}
-                  selMode={selMode}
-                  selected={selIds.has(log.id)}
-                  editing={editingLogId === log.id && !selMode}
-                  onTap={() => {
-                    if (selMode) toggleSelection(log.id);
-                    else setEditingLogId(editingLogId === log.id ? null : log.id);
-                  }}
-                  onTouchStart={() => handleTouchStart(log.id)}
-                  onTouchEnd={handleTouchEnd}
-                  onTouchMove={handleTouchMove}
-                  saveItem={saveItem}
-                  deleteWithUndo={deleteWithUndo}
-                />
-              ))}
-            </div>
-          </div>
-        ))}
+        {/* Month navigation */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, marginBottom: 8 }}>
+          <button className="btn ghost" onClick={() => {
+            const [y, m] = calendarMonth.split('-').map(Number);
+            const prev = m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
+            setCalendarMonth(prev);
+          }}>‹</button>
+          <span style={{ flex: 1, textAlign: 'center', fontWeight: 600, fontSize: 15 }}>
+            {(() => {
+              const [y, m] = calendarMonth.split('-').map(Number);
+              return new Date(y, m - 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+            })()}
+          </span>
+          <button className="btn ghost" onClick={() => {
+            const [y, m] = calendarMonth.split('-').map(Number);
+            const next = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+            setCalendarMonth(next);
+          }}>›</button>
+        </div>
 
-        {filteredLogs.length === 0 && (
-          <div className="empty">
-            No meals logged {rangeLabel}.
+        {/* Calendar grid */}
+        <div className="card" style={{ padding: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, textAlign: 'center' }}>
+            {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => (
+              <div key={i} style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', padding: '4px 0' }}>{d}</div>
+            ))}
+            {(() => {
+              const [y, m] = calendarMonth.split('-').map(Number);
+              const firstDay = new Date(y, m - 1, 1).getDay();
+              const daysInMonth = new Date(y, m, 0).getDate();
+              const offset = firstDay === 0 ? 6 : firstDay - 1;
+              const cells = [];
+              for (let i = 0; i < offset; i++) cells.push(<div key={'e' + i} />);
+              for (let d = 1; d <= daysInMonth; d++) {
+                const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                const hasLogs = logs.some(l => l.date === dateStr && !l.deleted);
+                const isToday = dateStr === today;
+                const isSelected = dateStr === selectedLogDate;
+                cells.push(
+                  <button key={d} onClick={() => setSelectedLogDate(dateStr)} style={{
+                    border: 'none', cursor: 'pointer', padding: '6px 2px', borderRadius: 8, fontSize: 13,
+                    fontWeight: isToday ? 700 : 400, position: 'relative',
+                    background: isSelected ? 'var(--accent)' : isToday ? 'var(--accent-wash)' : 'transparent',
+                    color: isSelected ? 'var(--accent-ink)' : dateStr > today ? 'var(--muted)' : 'var(--ink)',
+                  }}>
+                    {d}
+                    {hasLogs && !isSelected && (
+                      <span style={{ position: 'absolute', bottom: 2, left: '50%', transform: 'translateX(-50%)', width: 4, height: 4, borderRadius: '50%', background: 'var(--accent)' }} />
+                    )}
+                  </button>
+                );
+              }
+              return cells;
+            })()}
           </div>
-        )}
+        </div>
+
+        {/* Selected day's logs */}
+        <div style={{ marginTop: 12 }}>
+          <span className="eyebrow">{dayLabel(selectedLogDate)}</span>
+          {(() => {
+            const dayLogs = logs.filter(l => l.date === selectedLogDate && !l.deleted);
+            if (dayLogs.length === 0) return <div className="empty" style={{ padding: '20px 0' }}>No meals logged.</div>;
+            return (
+              <div className="list">
+                {dayLogs.map((log) => (
+                  <LogRow
+                    key={log.id}
+                    log={log}
+                    selMode={selMode}
+                    selected={selIds.has(log.id)}
+                    editing={editingLogId === log.id && !selMode}
+                    onTap={() => {
+                      if (selMode) toggleSelection(log.id);
+                      else setEditingLogId(editingLogId === log.id ? null : log.id);
+                    }}
+                    onTouchStart={() => handleTouchStart(log.id)}
+                    onTouchEnd={handleTouchEnd}
+                    onTouchMove={handleTouchMove}
+                    saveItem={saveItem}
+                    deleteWithUndo={deleteWithUndo}
+                  />
+                ))}
+              </div>
+            );
+          })()}
+        </div>
       </div>
 
       {/* Bottom spacer for tab bar */}

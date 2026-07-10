@@ -155,24 +155,19 @@ export default function Plan({
   /* -- fill day / fill week ----------------------------------- */
 
   const fillDay = useCallback(async (day, cuisineKey) => {
-    const plan = getPlan(day);
-    const meals = {
-      ...(plan?.meals || { breakfast: '', lunch: '', dinner: '' }),
-    };
-    const exclude = Object.values(meals).filter(Boolean);
+    const meals = { breakfast: '', lunch: '', dinner: '' };
+    const exclude = [];
     const isMix = cuisineKey === 'mix';
 
     for (const meal of MEALS) {
-      if (!meals[meal]) {
-        const name = pickDish(meal, day, {
-          dishes, plans, logs, exclude,
-          cuisines: isMix ? (prefsItem?.cuisines || null) : [cuisineKey],
-          diet: prefsItem?.diet || 'all',
-        });
-        if (name) {
-          meals[meal] = name;
-          exclude.push(name);
-        }
+      const name = pickDish(meal, day, {
+        dishes, plans, logs, exclude,
+        cuisines: isMix ? (prefsItem?.cuisines || null) : [cuisineKey],
+        diet: prefsItem?.diet || 'all',
+      });
+      if (name) {
+        meals[meal] = name;
+        exclude.push(name);
       }
     }
 
@@ -180,7 +175,7 @@ export default function Plan({
       meals,
       cuisine: isMix ? null : cuisineKey,
     });
-  }, [dishes, plans, logs, prefsItem, getPlan, savePlan]);
+  }, [dishes, plans, logs, prefsItem, savePlan]);
 
   const handleCuisineChoice = useCallback(async (cuisineKey) => {
     if (!showCuisineAsk) return;

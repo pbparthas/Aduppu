@@ -105,19 +105,17 @@ export default function Today({
   }, [today, todayPlan, saveItem, showToast]);
 
   const fillDay = useCallback(async () => {
-    const meals = { ...(todayPlan?.meals || { breakfast: '', lunch: '', dinner: '' }) };
-    const exclude = Object.values(meals).filter(Boolean);
+    const meals = { breakfast: '', lunch: '', dinner: '' };
+    const exclude = [];
     for (const meal of MEALS) {
-      if (!meals[meal]) {
-        const name = pickDish(meal, today, {
-          dishes, plans, logs, exclude,
-          cuisines: todayPlan?.cuisine ? [todayPlan.cuisine] : (prefsItem?.cuisines || null),
-          diet: prefsItem?.diet || 'all',
-        });
-        if (name) {
-          meals[meal] = name;
-          exclude.push(name);
-        }
+      const name = pickDish(meal, today, {
+        dishes, plans, logs, exclude,
+        cuisines: todayPlan?.cuisine ? [todayPlan.cuisine] : (prefsItem?.cuisines || null),
+        diet: prefsItem?.diet || 'all',
+      });
+      if (name) {
+        meals[meal] = name;
+        exclude.push(name);
       }
     }
     const id = 'plan-' + today;
