@@ -59,10 +59,10 @@ function regionKeyFor(key) {
 
 const EDITOR_INPUT = {
   width: '100%',
-  padding: '6px 8px',
+  padding: '12px 14px',
   border: '1px solid var(--line)',
-  borderRadius: '6px',
-  fontSize: '13px',
+  borderRadius: 10,
+  fontSize: 16,
   fontFamily: 'inherit',
   boxSizing: 'border-box',
   background: 'var(--card)',
@@ -499,6 +499,7 @@ export default function Cook({
             <button
               className={cuisineFilter === null ? 'on' : undefined}
               onClick={() => setCuisineFilter(null)}
+              title={favCuisines.length > 0 ? 'Filter to your favourite cuisines from Settings' : 'Show all cuisines'}
             >
               {favCuisines.length > 0 ? 'Favourites' : 'All'}
             </button>
@@ -512,6 +513,11 @@ export default function Cook({
               </button>
             ))}
           </div>
+          {cuisineFilter === null && favCuisines.length > 0 && (
+            <span className="lead" style={{ fontSize: 11, marginTop: 2 }}>
+              Showing favourite cuisines (from Settings)
+            </span>
+          )}
 
           {/* ── Results: Can cook now ── */}
           {kitchenResults.full.length > 0 && (
@@ -568,6 +574,9 @@ export default function Cook({
           )}
         </>
       )}
+
+      {/* Bottom spacer for tab bar */}
+      <div style={{ height: 20 }} />
 
       {/* ── Plan picker sheet (overlay) ── */}
       {showPlanPicker && (

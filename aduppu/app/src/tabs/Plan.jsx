@@ -4,13 +4,13 @@ import { pickDish } from '../lib/randomizer.js';
 import { CUISINES, expandCuisines } from '../lib/model.js';
 import { newItem } from '../lib/merge.js';
 
-/* ── constants ─────────────────────────────────────────── */
+/* -- constants ------------------------------------------------ */
 
 const MEALS = ['breakfast', 'lunch', 'dinner'];
 const MEAL_LABELS = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner' };
 const DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-/* ── helpers ───────────────────────────────────────────── */
+/* -- helpers -------------------------------------------------- */
 
 function getDayAbbr(dateStr) {
   const [y, m, d] = dateStr.split('-').map(Number);
@@ -31,11 +31,10 @@ function cuisineLabel(key) {
       }
     }
   }
-  // Fallback: capitalize the key
   return key.replace(/(^|-)(\w)/g, (_, _sep, ch) => ' ' + ch.toUpperCase()).trim();
 }
 
-/* ── tiny sub-components ─────────────────────────────── */
+/* -- tiny sub-components -------------------------------------- */
 
 function DietDot({ diet }) {
   if (!diet) return null;
@@ -65,7 +64,7 @@ function MealChip({ meal }) {
   );
 }
 
-/* ── main component ──────────────────────────────────── */
+/* -- main component ------------------------------------------- */
 
 export default function Plan({
   items, dishes, plans, logs, groceryItems,
@@ -87,7 +86,7 @@ export default function Plan({
   const allFavCuisines = prefsItem?.cuisines || [];
   const favCuisines = allFavCuisines.filter(k => !k.includes(':'));
 
-  /* ── lookups ───────────────────────────────────────── */
+  /* -- lookups ------------------------------------------------ */
 
   const getPlan = useCallback(
     (day) => plans.find(p => p.date === day),
@@ -107,7 +106,7 @@ export default function Plan({
     [dishes],
   );
 
-  /* ── week navigation ───────────────────────────────── */
+  /* -- week navigation ---------------------------------------- */
 
   const changeWeek = useCallback((delta) => {
     const anchor = addDays(weekAnchor, delta * 7);
@@ -116,7 +115,7 @@ export default function Plan({
     setSelectedDay(newDays.includes(today) ? today : newDays[0]);
   }, [weekAnchor, today]);
 
-  /* ── plan persistence ──────────────────────────────── */
+  /* -- plan persistence --------------------------------------- */
 
   const savePlan = useCallback(async (day, updates) => {
     const id = 'plan-' + day;
@@ -139,7 +138,7 @@ export default function Plan({
     await savePlan(day, { meals });
   }, [getPlan, savePlan]);
 
-  /* ── reroll a single slot ──────────────────────────── */
+  /* -- reroll a single slot ----------------------------------- */
 
   const rerollSlot = useCallback(async (day, meal) => {
     const plan = getPlan(day);
@@ -153,7 +152,7 @@ export default function Plan({
     if (name) await setSlot(day, meal, name);
   }, [dishes, plans, logs, prefsItem, getPlan, setSlot]);
 
-  /* ── fill day / fill week ──────────────────────────── */
+  /* -- fill day / fill week ----------------------------------- */
 
   const fillDay = useCallback(async (day, cuisineKey) => {
     const plan = getPlan(day);
@@ -199,7 +198,22 @@ export default function Plan({
     }
   }, [showCuisineAsk, days, fillDay]);
 
-  /* ── inline edit ───────────────────────────────────── */
+  /* -- clear day / clear week --------------------------------- */
+
+  const clearDay = useCallback(async (day) => {
+    await savePlan(day, { meals: { breakfast: '', lunch: '', dinner: '' }, cuisine: null });
+  }, [savePlan]);
+
+  const clearWeek = useCallback(async () => {
+    const todayStr = localDateStr();
+    for (const d of days) {
+      if (d >= todayStr) {
+        await savePlan(d, { meals: { breakfast: '', lunch: '', dinner: '' }, cuisine: null });
+      }
+    }
+  }, [days, savePlan]);
+
+  /* -- inline edit -------------------------------------------- */
 
   const startEdit = useCallback((day, meal, currentName) => {
     setEditingSlot({ day, meal });
@@ -228,7 +242,7 @@ export default function Plan({
       .slice(0, 6);
   }, [editValue, editingSlot, dishes]);
 
-  /* ── dish picker bottom sheet ──────────────────────── */
+  /* -- dish picker bottom sheet ------------------------------- */
 
   const pickerDishes = useMemo(() => {
     if (!showPicker) return [];
@@ -247,25 +261,25 @@ export default function Plan({
     return list;
   }, [showPicker, dishes, pickerSearch]);
 
-  /* ── remove cuisine from a day ─────────────────────── */
+  /* -- remove cuisine from a day ------------------------------ */
 
   const removeCuisine = useCallback(async (day) => {
     await savePlan(day, { cuisine: null });
   }, [savePlan]);
 
-  /* ── selected day's plan ───────────────────────────── */
+  /* -- selected day's plan ------------------------------------ */
 
   const selPlan = getPlan(selectedDay);
 
-  /* ── render ────────────────────────────────────────── */
+  /* -- render ------------------------------------------------- */
 
   return (
     <div className="screen">
 
-      {/* ── Week navigation ──────────────────────── */}
+      {/* -- Week navigation -- */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 16 }}>
         <button className="btn ghost" onClick={() => changeWeek(-1)}>
-          ‹
+          &#x2039;
         </button>
 
         <div className="seg" style={{ flex: 1, justifyContent: 'center' }}>
@@ -298,11 +312,11 @@ export default function Plan({
         </div>
 
         <button className="btn ghost" onClick={() => changeWeek(1)}>
-          ›
+          &#x203A;
         </button>
       </div>
 
-      {/* ── Selected day header ──────────────────── */}
+      {/* -- Selected day header -- */}
       <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
         <span className="disp" style={{ fontSize: '1.1rem', fontWeight: 600 }}>
           {dayLabel(selectedDay)}
@@ -320,13 +334,13 @@ export default function Plan({
               tabIndex={0}
               title="Remove cuisine"
             >
-              ✕
+              &#x2715;
             </span>
           </span>
         )}
       </div>
 
-      {/* ── Three meal boxes ─────────────────────── */}
+      {/* -- Three meal boxes -- */}
       {MEALS.map(meal => {
         const planned = selPlan?.meals?.[meal] || '';
         const isEditing = editingSlot?.day === selectedDay
@@ -353,17 +367,8 @@ export default function Plan({
                         if (e.key === 'Escape') cancelEdit();
                       }}
                       onBlur={() => setTimeout(commitEdit, 200)}
-                      style={{
-                        padding: '4px 8px',
-                        border: '1px solid var(--line)',
-                        borderRadius: 6,
-                        fontSize: '0.875rem',
-                        outline: 'none',
-                        width: '100%',
-                        boxSizing: 'border-box',
-                        background: 'var(--card)',
-                        color: 'var(--ink)',
-                      }}
+                      className="form-input"
+                      style={{ padding: '4px 8px', fontSize: '0.875rem' }}
                     />
                     {suggestions.length > 0 && (
                       <div style={{
@@ -417,8 +422,20 @@ export default function Plan({
                   fontSize: '0.7rem', color: 'var(--success)',
                   fontWeight: 600, whiteSpace: 'nowrap',
                 }}>
-                  ✓ had this
+                  &#x2713; had this
                 </span>
+              )}
+
+              {/* Clear slot */}
+              {planned && (
+                <button
+                  className="btn-clear"
+                  onClick={() => setSlot(selectedDay, meal, '')}
+                  title="Clear slot"
+                  style={{ padding: 4 }}
+                >
+                  &#x2715;
+                </button>
               )}
 
               {/* Reroll */}
@@ -448,7 +465,7 @@ export default function Plan({
         );
       })}
 
-      {/* ── Fill buttons ─────────────────────────── */}
+      {/* -- Fill + Clear buttons -- */}
       <div className="btn-row" style={{ marginBottom: 24 }}>
         <button
           className="btn accent"
@@ -458,66 +475,83 @@ export default function Plan({
           Fill day 🎲
         </button>
         <button
+          className="btn-clear"
+          onClick={() => clearDay(selectedDay)}
+        >
+          Clear day
+        </button>
+        <button
           className="btn accent"
           style={{ flex: 1 }}
           onClick={() => setShowCuisineAsk({ mode: 'week' })}
         >
           Fill week 🎲
         </button>
+        <button
+          className="btn-clear"
+          onClick={clearWeek}
+        >
+          Clear week
+        </button>
       </div>
 
-      {/* ── Week overview ────────────────────────── */}
+      {/* -- Week overview -- */}
       <span className="eyebrow" style={{ marginBottom: 8 }}>Week overview</span>
 
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        {days.map(day => {
-          const plan = getPlan(day);
-          const isPast = day < today;
-          const isToday = day === today;
-          return (
-            <div
-              key={day}
-              className={`week-row${isToday ? ' today' : ''}`}
-              onClick={() => setSelectedDay(day)}
-              style={{
-                padding: '8px 12px',
-                cursor: 'pointer',
-                opacity: isPast ? 0.5 : 1,
-                ...(isToday ? { background: 'var(--accent-wash)' } : {}),
-              }}
-            >
-              <span className="day-name" style={{ minWidth: 46, whiteSpace: 'nowrap' }}>
-                {getDayAbbr(day)} {getDayNum(day)}
-              </span>
-
-              <div className="meals">
-                {MEALS.map(meal => {
-                  const name = plan?.meals?.[meal] || '';
-                  return (
-                    <span key={meal} style={{
-                      flex: 1, fontSize: '0.7rem',
-                      color: name ? 'var(--ink)' : 'var(--muted)',
-                      overflow: 'hidden', textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap', padding: '2px 4px',
-                      borderRadius: 4,
-                    }}>
-                      {name || '—'}
-                    </span>
-                  );
-                })}
-              </div>
-
-              {plan?.cuisine && (
-                <span className="chip cuisine">
-                  {cuisineLabel(plan.cuisine)}
+      <div className="card" style={{ padding: 0, overflow: 'hidden', marginBottom: 20 }}>
+        <div style={{ overflowX: 'auto' }}>
+          {days.map(day => {
+            const plan = getPlan(day);
+            const isPast = day < today;
+            const isToday = day === today;
+            return (
+              <div
+                key={day}
+                className={`week-row${isToday ? ' today' : ''}`}
+                onClick={() => setSelectedDay(day)}
+                style={{
+                  padding: '8px 12px',
+                  cursor: 'pointer',
+                  opacity: isPast ? 0.5 : 1,
+                  ...(isToday ? { background: 'var(--accent-wash)' } : {}),
+                }}
+              >
+                <span className="day-name" style={{ minWidth: 46, whiteSpace: 'nowrap' }}>
+                  {getDayAbbr(day)} {getDayNum(day)}
                 </span>
-              )}
-            </div>
-          );
-        })}
+
+                <div className="meals">
+                  {MEALS.map(meal => {
+                    const name = plan?.meals?.[meal] || '';
+                    return (
+                      <span key={meal} style={{
+                        flex: 1, fontSize: '0.7rem',
+                        color: name ? 'var(--ink)' : 'var(--muted)',
+                        overflow: 'hidden', textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap', padding: '2px 4px',
+                        borderRadius: 4,
+                      }}>
+                        {name || '—'}
+                      </span>
+                    );
+                  })}
+                </div>
+
+                {plan?.cuisine && (
+                  <span className="chip cuisine">
+                    {cuisineLabel(plan.cuisine)}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
 
-      {/* ── Cuisine ask bottom sheet ─────────────── */}
+      {/* Bottom spacer for tab bar */}
+      <div style={{ height: 20 }} />
+
+      {/* -- Cuisine ask bottom sheet -- */}
       {showCuisineAsk && (
         <div className="overlay" onClick={() => setShowCuisineAsk(null)}>
           <div className="panel" onClick={e => e.stopPropagation()}>
@@ -545,7 +579,7 @@ export default function Plan({
         </div>
       )}
 
-      {/* ── Dish picker bottom sheet ─────────────── */}
+      {/* -- Dish picker bottom sheet -- */}
       {showPicker && (
         <div className="overlay" onClick={() => setShowPicker(null)}>
           <div
@@ -554,7 +588,7 @@ export default function Plan({
             style={{ maxHeight: '70vh' }}
           >
             <div style={{ fontSize: '1rem', fontWeight: 600 }}>
-              Pick a dish — {MEAL_LABELS[showPicker.meal]}
+              Pick a dish &mdash; {MEAL_LABELS[showPicker.meal]}
             </div>
 
             <div className="search">

@@ -4,26 +4,26 @@ import { CUISINES, expandCuisines, DIET_ALLOWED, newItem } from '../lib/model.js
 import { matchDish, STAPLES, normalize } from '../lib/kitchen.js';
 import { pickDish } from '../lib/randomizer.js';
 
-// ── Currency formatter (en-IN with ₹ prefix) ────────────────────────────────
+// -- Currency formatter (en-IN) -------------------------------------------
 
 function formatCurrency(amount) {
   return `₹${(amount || 0).toLocaleString('en-IN')}`;
 }
 
-// ── Capitalize ───────────────────────────────────────────────────────────────
+// -- Capitalize -----------------------------------------------------------
 
 function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
 
-// ═════════════════════════════════════════════════════════════════════════════
+// =========================================================================
 // Track component
-// ═════════════════════════════════════════════════════════════════════════════
+// =========================================================================
 
 export default function Track({
   items, dishes, plans, logs, groceryItems,
   pantryItem, prefsItem, saveItem, deleteWithUndo,
 }) {
-  // ── State ────────────────────────────────────────────────────────────────
-  const [range, setRange]                   = useState('7days');  // '7days' | '30days' | 'all'
+  // -- State --------------------------------------------------------------
+  const [range, setRange]                   = useState('7days');
   const [selMode, setSelMode]               = useState(false);
   const [selIds, setSelIds]                 = useState(new Set());
   const [addingGrocery, setAddingGrocery]   = useState(false);
@@ -36,7 +36,7 @@ export default function Track({
   // Long-press timer for multi-select
   const longPressTimer = useRef(null);
 
-  // ── Date cutoff for the selected range ───────────────────────────────────
+  // -- Date cutoff --------------------------------------------------------
   const today = localDateStr();
   const cutoffDate = useMemo(() => {
     if (range === '7days')  return addDays(today, -6);
@@ -44,7 +44,7 @@ export default function Track({
     return null;
   }, [range, today]);
 
-  // ── Filtered logs and grocery items ──────────────────────────────────────
+  // -- Filtered logs and grocery items ------------------------------------
   const filteredLogs = useMemo(() => {
     const active = logs.filter((l) => !l.deleted);
     return cutoffDate ? active.filter((l) => l.date >= cutoffDate) : active;
@@ -55,7 +55,7 @@ export default function Track({
     return cutoffDate ? active.filter((g) => g.date >= cutoffDate) : active;
   }, [groceryItems, cutoffDate]);
 
-  // ── Stats ────────────────────────────────────────────────────────────────
+  // -- Stats --------------------------------------------------------------
   const stats = useMemo(() => {
     const homeCooked  = filteredLogs.filter((l) => l.mode === 'home').length;
     const ordered     = filteredLogs.filter((l) => l.mode === 'out').length;
@@ -64,7 +64,7 @@ export default function Track({
     return { homeCooked, ordered, orderSpend, grocerySpend };
   }, [filteredLogs, filteredGrocery]);
 
-  // ── Summary text ─────────────────────────────────────────────────────────
+  // -- Summary text -------------------------------------------------------
   const rangeLabel = range === '7days' ? 'this week' : range === '30days' ? 'this month' : 'in total';
   const summaryText = useMemo(() => {
     const c = stats.homeCooked;
@@ -75,7 +75,7 @@ export default function Track({
     return parts.join(' ');
   }, [stats, rangeLabel]);
 
-  // ── Logs grouped by date (descending) ────────────────────────────────────
+  // -- Logs grouped by date (descending) ----------------------------------
   const logsByDate = useMemo(() => {
     const groups = {};
     for (const log of filteredLogs) {
@@ -91,13 +91,13 @@ export default function Track({
     [logsByDate],
   );
 
-  // ── Grocery sorted by date descending ────────────────────────────────────
+  // -- Grocery sorted by date descending ----------------------------------
   const sortedGrocery = useMemo(
     () => [...filteredGrocery].sort((a, b) => (b.date || '').localeCompare(a.date || '')),
     [filteredGrocery],
   );
 
-  // ── Handlers ─────────────────────────────────────────────────────────────
+  // -- Handlers -----------------------------------------------------------
 
   const handleAddGrocery = () => {
     const amount = parseFloat(groceryAmount);
@@ -161,11 +161,11 @@ export default function Track({
     }
   }, []);
 
-  // ── Render ───────────────────────────────────────────────────────────────
+  // -- Render -------------------------------------------------------------
   return (
     <div className="screen">
 
-      {/* ── Range toggle ── */}
+      {/* -- Range toggle -- */}
       <div className="seg">
         {[
           { key: '7days',  label: '7 days' },
@@ -182,12 +182,12 @@ export default function Track({
         ))}
       </div>
 
-      {/* ── Summary card ── */}
+      {/* -- Summary card -- */}
       <div className="card" style={{ marginTop: 10 }}>
         <p>{summaryText}</p>
       </div>
 
-      {/* ── 2×2 stat tiles ── */}
+      {/* -- 2x2 stat tiles -- */}
       <div className="stat-grid">
         <StatTile label="Home Cooked" value={stats.homeCooked} />
         <StatTile label="Ordered" value={stats.ordered} />
@@ -195,20 +195,19 @@ export default function Track({
         <StatTile label="Grocery Spend" value={formatCurrency(stats.grocerySpend)} />
       </div>
 
-      {/* ── Grocery section ── */}
+      {/* -- Grocery section -- */}
       <div className="section">
         <span className="eyebrow">Groceries</span>
 
         {addingGrocery ? (
           <div className="card" style={{ marginTop: 10 }}>
-            <div className="add-composer">
+            <div className="form-stack">
               <input
                 type="date"
                 value={groceryDate}
                 onChange={(e) => setGroceryDate(e.target.value)}
-                style={{ flex: 'none' }}
+                className="form-input"
               />
-              <span>₹</span>
               <input
                 type="number"
                 inputMode="decimal"
@@ -217,7 +216,7 @@ export default function Track({
                 onChange={(e) => setGroceryAmount(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') handleAddGrocery(); }}
                 autoFocus
-                style={{ maxWidth: 100 }}
+                className="form-input"
               />
               <input
                 type="text"
@@ -225,11 +224,12 @@ export default function Track({
                 value={groceryNote}
                 onChange={(e) => setGroceryNote(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') handleAddGrocery(); }}
+                className="form-input"
               />
             </div>
             <div className="btn-row">
               <div className="spacer" />
-              <button className="btn ghost" onClick={() => setAddingGrocery(false)}>Cancel</button>
+              <button className="btn" onClick={() => setAddingGrocery(false)}>Cancel</button>
               <button className="btn accent" onClick={handleAddGrocery}>Add</button>
             </div>
           </div>
@@ -258,7 +258,7 @@ export default function Track({
         </div>
       </div>
 
-      {/* ── Meal log ── */}
+      {/* -- Meal log -- */}
       <div className="section">
         <span className="eyebrow">Meal Log</span>
 
@@ -295,7 +295,10 @@ export default function Track({
         )}
       </div>
 
-      {/* ── Selection bar ── */}
+      {/* Bottom spacer for tab bar */}
+      <div style={{ height: 20 }} />
+
+      {/* -- Selection bar -- */}
       {selMode && (
         <div className="selbar">
           <button
@@ -314,28 +317,28 @@ export default function Track({
   );
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
-// StatTile — big-number stat card (Saira Condensed via .stat-num)
-// ═════════════════════════════════════════════════════════════════════════════
+// =========================================================================
+// StatTile
+// =========================================================================
 
 function StatTile({ label, value }) {
   return (
     <div className="stat-tile">
-      <div className="stat-num">{value}</div>
+      <div className="stat-num disp">{value}</div>
       <div className="stat-label">{label}</div>
     </div>
   );
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
-// GroceryRow — grocery entry with inline edit
-// ═════════════════════════════════════════════════════════════════════════════
+// =========================================================================
+// GroceryRow -- grocery entry with inline edit
+// =========================================================================
 
 function GroceryRow({ grocery, editing, onEdit, saveItem, deleteWithUndo }) {
   return (
-    <div className="card">
+    <div className="card" style={{ cursor: 'pointer' }} onClick={onEdit}>
       {/* Summary row */}
-      <div className="task-row" onClick={onEdit}>
+      <div className="task-row">
         <span className="lead" style={{ minWidth: 60, flexShrink: 0 }}>
           {dayLabel(grocery.date)}
         </span>
@@ -348,7 +351,7 @@ function GroceryRow({ grocery, editing, onEdit, saveItem, deleteWithUndo }) {
       {/* Inline edit */}
       {editing && (
         <div className="task-detail" onClick={(e) => e.stopPropagation()}>
-          <div className="add-composer">
+          <div className="form-stack">
             <input
               type="date"
               key={`gd-${grocery.id}-${grocery.updated_at}`}
@@ -358,19 +361,19 @@ function GroceryRow({ grocery, editing, onEdit, saveItem, deleteWithUndo }) {
                   saveItem({ ...grocery, date: e.target.value });
                 }
               }}
-              style={{ flex: 'none' }}
+              className="form-input"
             />
-            <span>₹</span>
             <input
               type="number"
               inputMode="decimal"
               key={`ga-${grocery.id}-${grocery.updated_at}`}
               defaultValue={grocery.amount}
+              placeholder="Amount"
               onBlur={(e) => {
                 const v = parseFloat(e.target.value);
                 if (!isNaN(v) && v !== grocery.amount) saveItem({ ...grocery, amount: v });
               }}
-              style={{ maxWidth: 80 }}
+              className="form-input"
             />
             <input
               type="text"
@@ -380,6 +383,7 @@ function GroceryRow({ grocery, editing, onEdit, saveItem, deleteWithUndo }) {
                 if (e.target.value !== (grocery.note || '')) saveItem({ ...grocery, note: e.target.value });
               }}
               placeholder="Note"
+              className="form-input"
             />
           </div>
           <div className="btn-row">
@@ -398,9 +402,9 @@ function GroceryRow({ grocery, editing, onEdit, saveItem, deleteWithUndo }) {
   );
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
-// LogRow — meal log entry with inline edit + multi-select
-// ═════════════════════════════════════════════════════════════════════════════
+// =========================================================================
+// LogRow -- meal log entry with inline edit + multi-select
+// =========================================================================
 
 function LogRow({
   log, selMode, selected, editing,
@@ -408,7 +412,6 @@ function LogRow({
   saveItem, deleteWithUndo,
 }) {
   const mealClass = log.meal || 'lunch';
-  const modeIcon = log.mode === 'home' ? '🏠' : '🛵';
   const modeLabel = log.mode === 'home' ? 'Home' : 'Order';
 
   return (
@@ -431,7 +434,7 @@ function LogRow({
           {cap(log.meal || '')}
         </span>
         <span className="chip plain">
-          {modeIcon} {modeLabel}
+          {modeLabel}
         </span>
         <span className="task-main">
           {log.dish || ''}
@@ -453,7 +456,7 @@ function LogRow({
       {/* Inline edit (only when not in selection mode) */}
       {editing && (
         <div className="task-detail" onClick={(e) => e.stopPropagation()}>
-          <div className="add-composer">
+          <div className="form-stack">
             <input
               type="text"
               key={`ld-${log.id}-${log.updated_at}`}
@@ -462,29 +465,29 @@ function LogRow({
                 if (e.target.value !== (log.dish || '')) saveItem({ ...log, dish: e.target.value });
               }}
               placeholder="Dish name"
+              className="form-input"
             />
-            <select
-              className="btn small"
-              key={`lm-${log.id}-${log.updated_at}`}
-              defaultValue={log.meal || 'lunch'}
-              onChange={(e) => saveItem({ ...log, meal: e.target.value })}
-            >
-              <option value="breakfast">Breakfast</option>
-              <option value="lunch">Lunch</option>
-              <option value="dinner">Dinner</option>
-            </select>
-            <select
-              className="btn small"
-              key={`lmd-${log.id}-${log.updated_at}`}
-              defaultValue={log.mode || 'home'}
-              onChange={(e) => saveItem({ ...log, mode: e.target.value })}
-            >
-              <option value="home">🏠 Home</option>
-              <option value="out">🛵 Ordered</option>
-            </select>
-          </div>
-          <div className="add-composer">
-            <span>₹</span>
+            <div className="row" style={{ gap: 8 }}>
+              <select
+                className="btn small"
+                key={`lm-${log.id}-${log.updated_at}`}
+                defaultValue={log.meal || 'lunch'}
+                onChange={(e) => saveItem({ ...log, meal: e.target.value })}
+              >
+                <option value="breakfast">Breakfast</option>
+                <option value="lunch">Lunch</option>
+                <option value="dinner">Dinner</option>
+              </select>
+              <select
+                className="btn small"
+                key={`lmd-${log.id}-${log.updated_at}`}
+                defaultValue={log.mode || 'home'}
+                onChange={(e) => saveItem({ ...log, mode: e.target.value })}
+              >
+                <option value="home">Home</option>
+                <option value="out">Ordered</option>
+              </select>
+            </div>
             <input
               type="number"
               inputMode="decimal"
@@ -494,7 +497,8 @@ function LogRow({
                 const v = parseFloat(e.target.value) || 0;
                 if (v !== (log.cost || 0)) saveItem({ ...log, cost: v });
               }}
-              style={{ maxWidth: 70 }}
+              placeholder="Cost"
+              className="form-input"
             />
             <input
               type="text"
@@ -504,6 +508,7 @@ function LogRow({
                 if (e.target.value !== (log.notes || '')) saveItem({ ...log, notes: e.target.value });
               }}
               placeholder="Notes"
+              className="form-input"
             />
           </div>
           <div className="btn-row">

@@ -16,16 +16,21 @@ function DietDot({ diet }) {
   if (!diet) return null;
   if (diet === 'nonveg') {
     return (
-      <svg width="10" height="10" viewBox="0 0 10 10" className="diet-dot nonveg" aria-label="Non-veg">
-        <polygon points="5,0.5 9.5,9.5 0.5,9.5" fill="#8B4513" />
-      </svg>
+      <span className="diet-dot nonveg" aria-label="Non-veg">
+        <svg viewBox="0 0 14 14" width="10" height="10">
+          <rect x="0.5" y="0.5" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1" />
+          <polygon points="7,3 11,11 3,11" fill="currentColor" />
+        </svg>
+      </span>
     );
   }
   return (
-    <svg width="10" height="10" viewBox="0 0 10 10" className={'diet-dot ' + (diet === 'egg' ? 'egg' : 'veg')}
-      aria-label={diet === 'egg' ? 'Egg' : 'Veg'}>
-      <circle cx="5" cy="5" r="4.5" fill={diet === 'egg' ? '#DAA520' : '#228B22'} />
-    </svg>
+    <span className={'diet-dot ' + (diet === 'egg' ? 'egg' : 'veg')} aria-label={diet === 'egg' ? 'Egg' : 'Veg'}>
+      <svg viewBox="0 0 14 14" width="10" height="10">
+        <rect x="0.5" y="0.5" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1" />
+        <circle cx="7" cy="7" r="3.5" fill="currentColor" />
+      </svg>
+    </span>
   );
 }
 
@@ -81,6 +86,41 @@ export default function Today({
       ...(todayPlan?.meals || { breakfast: '', lunch: '', dinner: '' }),
       [meal]: name,
     };
+    await saveItem({ ...(todayPlan || {}), id, type: 'plan', date: today, meals });
+  }, [today, dishes, plans, logs, todayPlan, prefsItem, saveItem]);
+
+  const clearSlot = useCallback(async (meal) => {
+    const id = 'plan-' + today;
+    const meals = {
+      ...(todayPlan?.meals || { breakfast: '', lunch: '', dinner: '' }),
+      [meal]: '',
+    };
+    await saveItem({ ...(todayPlan || {}), id, type: 'plan', date: today, meals });
+  }, [today, todayPlan, saveItem]);
+
+  const clearDay = useCallback(async () => {
+    const id = 'plan-' + today;
+    await saveItem({ ...(todayPlan || {}), id, type: 'plan', date: today, meals: { breakfast: '', lunch: '', dinner: '' } });
+    showToast('Day cleared');
+  }, [today, todayPlan, saveItem, showToast]);
+
+  const fillDay = useCallback(async () => {
+    const meals = { ...(todayPlan?.meals || { breakfast: '', lunch: '', dinner: '' }) };
+    const exclude = Object.values(meals).filter(Boolean);
+    for (const meal of MEALS) {
+      if (!meals[meal]) {
+        const name = pickDish(meal, today, {
+          dishes, plans, logs, exclude,
+          cuisines: todayPlan?.cuisine ? [todayPlan.cuisine] : (prefsItem?.cuisines || null),
+          diet: prefsItem?.diet || 'all',
+        });
+        if (name) {
+          meals[meal] = name;
+          exclude.push(name);
+        }
+      }
+    }
+    const id = 'plan-' + today;
     await saveItem({ ...(todayPlan || {}), id, type: 'plan', date: today, meals });
   }, [today, dishes, plans, logs, todayPlan, prefsItem, saveItem]);
 
@@ -148,6 +188,16 @@ export default function Today({
         {dateDisplay}
       </div>
 
+      {/* Fill day + Clear day */}
+      <div className="btn-row" style={{ marginBottom: 14, marginTop: 0 }}>
+        <button className="btn accent" style={{ flex: 1 }} onClick={fillDay}>
+          Fill day
+        </button>
+        <button className="btn-clear" onClick={clearDay}>
+          Clear day
+        </button>
+      </div>
+
       {/* Meal cards */}
       {MEALS.map(meal => {
         const planned = todayPlan?.meals?.[meal] || '';
@@ -164,42 +214,49 @@ export default function Today({
               <span style={{ flex: 1, fontSize: 15, fontWeight: planned ? 600 : 400, color: planned ? 'var(--ink)' : 'var(--muted)' }}>
                 {planned || 'Nothing planned'}
               </span>
-              <button className="btn" style={{ padding: '6px 10px', fontSize: 16, minHeight: 0, border: 'none', background: 'none' }}
-                onClick={() => reroll(meal)} title="Reroll">🎲</button>
-            </div>
-
-            {/* "Cooked this" quick button */}
-            {planned && !hasLog && (
-              <button className="btn accent" style={{ width: '100%', marginBottom: 10 }}
-                onClick={() => cookedThis(meal, planned)}>
-                Cooked this ✓
+              {planned && !hasLog && (
+                <button className="btn-clear" style={{ color: 'var(--success)', fontSize: 12 }}
+                  onClick={() => cookedThis(meal, planned)}>
+                  Cooked ✓
+                </button>
+              )}
+              {planned && (
+                <button className="btn-clear" onClick={() => clearSlot(meal)} title="Clear slot">
+                  ✕
+                </button>
+              )}
+              <button className="btn-clear" style={{ fontSize: 16 }}
+                onClick={() => reroll(meal)} title="Reroll">
+                🎲
               </button>
-            )}
+            </div>
 
             {/* Logged entries */}
             {mealLogs.map(log => (
               <div key={log.id} style={{ marginBottom: 6 }}>
                 {editingLogId === log.id ? (
                   <div className="card" style={{ padding: 10, background: 'var(--bg)' }}>
-                    <input className="search" style={{ marginBottom: 6 }}
-                      value={editValues.dish ?? ''} placeholder="Dish name"
-                      onChange={e => setEditValues(v => ({ ...v, dish: e.target.value }))} />
-                    <div className="seg" style={{ marginBottom: 6 }}>
-                      <button className={(editValues.mode ?? log.mode) === 'home' ? 'on' : ''}
-                        onClick={() => setEditValues(v => ({ ...v, mode: 'home' }))}>
-                        🏠 Home cooked
-                      </button>
-                      <button className={(editValues.mode ?? log.mode) === 'out' ? 'on' : ''}
-                        onClick={() => setEditValues(v => ({ ...v, mode: 'out' }))}>
-                        🛵 Ordered out
-                      </button>
+                    <div className="form-stack">
+                      <input className="form-input"
+                        value={editValues.dish ?? ''} placeholder="Dish name"
+                        onChange={e => setEditValues(v => ({ ...v, dish: e.target.value }))} />
+                      <div className="seg">
+                        <button className={(editValues.mode ?? log.mode) === 'home' ? 'on' : ''}
+                          onClick={() => setEditValues(v => ({ ...v, mode: 'home' }))}>
+                          Home cooked
+                        </button>
+                        <button className={(editValues.mode ?? log.mode) === 'out' ? 'on' : ''}
+                          onClick={() => setEditValues(v => ({ ...v, mode: 'out' }))}>
+                          Ordered out
+                        </button>
+                      </div>
+                      {(editValues.mode ?? log.mode) === 'out' && (
+                        <input type="number" placeholder="Cost" className="form-input"
+                          value={editValues.cost ?? ''} onChange={e => setEditValues(v => ({ ...v, cost: e.target.value }))} />
+                      )}
+                      <input placeholder="Note (optional)" className="form-input"
+                        value={editValues.notes ?? ''} onChange={e => setEditValues(v => ({ ...v, notes: e.target.value }))} />
                     </div>
-                    {(editValues.mode ?? log.mode) === 'out' && (
-                      <input type="number" placeholder="₹ cost" style={{ marginBottom: 6, width: '100%', padding: '8px 10px', border: '1px solid var(--line)', borderRadius: 8, background: 'var(--card)', color: 'var(--ink)', fontSize: 14 }}
-                        value={editValues.cost ?? ''} onChange={e => setEditValues(v => ({ ...v, cost: e.target.value }))} />
-                    )}
-                    <input placeholder="Note (optional)" style={{ marginBottom: 8, width: '100%', padding: '8px 10px', border: '1px solid var(--line)', borderRadius: 8, background: 'var(--card)', color: 'var(--ink)', fontSize: 14 }}
-                      value={editValues.notes ?? ''} onChange={e => setEditValues(v => ({ ...v, notes: e.target.value }))} />
                     <div className="btn-row">
                       <button className="btn" onClick={() => { setEditingLogId(null); setEditValues({}); }}>Cancel</button>
                       <button className="btn accent" onClick={() => saveEdit(log)}>Save</button>
@@ -209,13 +266,13 @@ export default function Today({
                   <div onClick={() => { setEditingLogId(log.id); setEditValues({ dish: log.dish, mode: log.mode, cost: log.cost || '', notes: log.notes || '' }); }}
                     style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 'var(--radius)', background: 'var(--bg)', cursor: 'pointer' }}>
                     <span className={'chip ' + (log.mode === 'home' ? 'plain' : 'grain')} style={{ fontSize: 11 }}>
-                      {log.mode === 'home' ? '🏠 Home' : '🛵 Order'}
+                      {log.mode === 'home' ? 'Home' : 'Order'}
                     </span>
                     <DietDot diet={getDiet(log.dish)} />
                     <span style={{ flex: 1, fontSize: 14, fontWeight: 500 }}>{log.dish}</span>
-                    {log.cost > 0 && <span style={{ fontSize: 13, color: 'var(--muted)' }}>₹{log.cost}</span>}
+                    {log.cost > 0 && <span style={{ fontSize: 13, color: 'var(--muted)' }}>{log.cost}</span>}
                     <button onClick={e => { e.stopPropagation(); deleteWithUndo(log); }}
-                      className="search-x" title="Delete">✕</button>
+                      className="search-x" title="Delete">&#x2715;</button>
                   </div>
                 )}
               </div>
@@ -224,27 +281,29 @@ export default function Today({
             {/* Log composer */}
             {expandedMeal === meal ? (
               <div style={{ marginTop: 8, padding: 12, borderRadius: 'var(--radius)', border: '1px dashed var(--line)', background: 'var(--bg)' }}>
-                <input autoFocus placeholder="What did you have?" value={composer.dish}
-                  onChange={e => setComposer(c => ({ ...c, dish: e.target.value }))}
-                  style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--line)', borderRadius: 8, background: 'var(--card)', color: 'var(--ink)', fontSize: 15, marginBottom: 8 }} />
-                <div className="seg" style={{ marginBottom: 8 }}>
-                  <button className={composer.mode === 'home' ? 'on' : ''}
-                    onClick={() => setComposer(c => ({ ...c, mode: 'home' }))}>
-                    🏠 Home cooked
-                  </button>
-                  <button className={composer.mode === 'out' ? 'on' : ''}
-                    onClick={() => setComposer(c => ({ ...c, mode: 'out' }))}>
-                    🛵 Ordered out
-                  </button>
+                <div className="form-stack">
+                  <input autoFocus placeholder="What did you have?" value={composer.dish}
+                    onChange={e => setComposer(c => ({ ...c, dish: e.target.value }))}
+                    className="form-input" />
+                  <div className="seg">
+                    <button className={composer.mode === 'home' ? 'on' : ''}
+                      onClick={() => setComposer(c => ({ ...c, mode: 'home' }))}>
+                      Home cooked
+                    </button>
+                    <button className={composer.mode === 'out' ? 'on' : ''}
+                      onClick={() => setComposer(c => ({ ...c, mode: 'out' }))}>
+                      Ordered out
+                    </button>
+                  </div>
+                  {composer.mode === 'out' && (
+                    <input type="number" placeholder="Amount spent" value={composer.cost}
+                      onChange={e => setComposer(c => ({ ...c, cost: e.target.value }))}
+                      className="form-input" />
+                  )}
+                  <input placeholder="Note (optional)" value={composer.note}
+                    onChange={e => setComposer(c => ({ ...c, note: e.target.value }))}
+                    className="form-input" />
                 </div>
-                {composer.mode === 'out' && (
-                  <input type="number" placeholder="₹ Amount spent" value={composer.cost}
-                    onChange={e => setComposer(c => ({ ...c, cost: e.target.value }))}
-                    style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--line)', borderRadius: 8, background: 'var(--card)', color: 'var(--ink)', fontSize: 14, marginBottom: 8 }} />
-                )}
-                <input placeholder="Note (optional)" value={composer.note}
-                  onChange={e => setComposer(c => ({ ...c, note: e.target.value }))}
-                  style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--line)', borderRadius: 8, background: 'var(--card)', color: 'var(--ink)', fontSize: 14, marginBottom: 10 }} />
                 <div className="btn-row">
                   <button className="btn" onClick={() => setExpandedMeal(null)}>Cancel</button>
                   <button className="btn accent" disabled={!composer.dish.trim()} onClick={() => submitComposer(meal)}>
@@ -263,12 +322,15 @@ export default function Today({
 
       {/* Summary */}
       {summary && (
-        <div className="card" style={{ display: 'flex', justifyContent: 'center', gap: 16, fontSize: 13, color: 'var(--muted)' }}>
-          <span>🏠 <strong style={{ color: 'var(--ink)' }}>{summary.cooked}</strong> cooked</span>
-          {summary.ordered > 0 && <span>🛵 <strong style={{ color: 'var(--ink)' }}>{summary.ordered}</strong> ordered</span>}
-          {summary.spent > 0 && <span>₹ <strong style={{ color: 'var(--ink)' }}>{summary.spent}</strong> spent</span>}
+        <div className="card" style={{ display: 'flex', justifyContent: 'center', gap: 16, fontSize: 13, color: 'var(--muted)', marginBottom: 20 }}>
+          <span>Home <strong style={{ color: 'var(--ink)' }}>{summary.cooked}</strong> cooked</span>
+          {summary.ordered > 0 && <span>Order <strong style={{ color: 'var(--ink)' }}>{summary.ordered}</strong> ordered</span>}
+          {summary.spent > 0 && <span>Spent <strong style={{ color: 'var(--ink)' }}>{summary.spent}</strong></span>}
         </div>
       )}
+
+      {/* Bottom spacer for tab bar */}
+      <div style={{ height: 20 }} />
 
       {/* Toast */}
       {toast && (
