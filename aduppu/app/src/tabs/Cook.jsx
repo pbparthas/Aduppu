@@ -2,38 +2,52 @@ import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { localDateStr, dayLabel, addDays } from '../lib/dates.js';
 import { CUISINES, expandCuisines, DIET_ALLOWED, newItem } from '../lib/model.js';
 import { matchDish, STAPLES, normalize } from '../lib/kitchen.js';
-import { pickDish } from '../lib/randomizer.js';
+import DietDot from '../components/DietDot.jsx';
+import Sheet from '../components/Sheet.jsx';
+import Composer from '../components/Composer.jsx';
+import SegRow from '../components/SegRow.jsx';
+import Chip from '../components/Chip.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import { SearchIcon } from '../components/Icons.jsx';
 
-// ── FSSAI diet dot (inline SVG) ──────────────────────────────────────────────
-// Green circle = veg, yellow circle = egg, brown triangle = non-veg.
-// Renders via .diet-dot CSS classes which set color via currentColor.
+/* ── Constants ───────────────────────────────────────────────────────────── */
 
-function DietDot({ diet, size }) {
-  const cls = diet === 'nonveg' ? 'nonveg' : diet === 'egg' ? 'egg' : 'veg';
-  const label = diet === 'nonveg' ? 'Non-vegetarian' : diet === 'egg' ? 'Egg' : 'Vegetarian';
-  const sizeStyle = size ? { width: size, height: size } : undefined;
+const MODE_ITEMS = [
+  { key: 'all', label: 'All dishes' },
+  { key: 'kitchen', label: 'From my kitchen' },
+];
 
-  if (diet === 'nonveg') {
-    return (
-      <span className={`diet-dot ${cls}`} aria-label={label} style={sizeStyle}>
-        <svg viewBox="0 0 14 14">
-          <rect x="0.5" y="0.5" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1" />
-          <polygon points="7,3 11,11 3,11" fill="currentColor" />
-        </svg>
-      </span>
-    );
-  }
-  return (
-    <span className={`diet-dot ${cls}`} aria-label={label} style={sizeStyle}>
-      <svg viewBox="0 0 14 14">
-        <rect x="0.5" y="0.5" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1" />
-        <circle cx="7" cy="7" r="3.5" fill="currentColor" />
-      </svg>
-    </span>
-  );
-}
+const MEAL_FILTER_ITEMS = [
+  { key: 'all', label: 'All' },
+  { key: 'breakfast', label: 'Breakfast' },
+  { key: 'lunch', label: 'Lunch' },
+  { key: 'dinner', label: 'Dinner' },
+];
 
-// ── Cuisine label lookup ─────────────────────────────────────────────────────
+const MEAL_SEG_ITEMS = [
+  { key: 'breakfast', label: 'Breakfast' },
+  { key: 'lunch', label: 'Lunch' },
+  { key: 'dinner', label: 'Dinner' },
+];
+
+const MEAL_OPTIONS = [
+  { value: 'breakfast', label: 'Breakfast' },
+  { value: 'lunch', label: 'Lunch' },
+  { value: 'dinner', label: 'Dinner' },
+];
+
+const DIET_OPTIONS = [
+  { value: 'veg', label: 'Vegetarian' },
+  { value: 'egg', label: 'Egg' },
+  { value: 'nonveg', label: 'Non-vegetarian' },
+];
+
+const MODE_OPTIONS = [
+  { value: 'home', label: 'Home' },
+  { value: 'out', label: 'Order' },
+];
+
+/* ── Helpers ─────────────────────────────────────────────────────────────── */
 
 const CUISINE_LABELS = {};
 for (const c of CUISINES) {
@@ -42,79 +56,86 @@ for (const c of CUISINES) {
 }
 function cuisineLabel(key) { return CUISINE_LABELS[key] || key || ''; }
 
-// ── Capitalize ───────────────────────────────────────────────────────────────
-
 function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
 
-// ── Which region does a cuisine key belong to? ───────────────────────────────
-
-function regionKeyFor(key) {
-  if (!key) return null;
-  if (CUISINES.find((c) => c.key === key)) return key;
-  if (key.includes(':')) return key.split(':')[0];
-  return null;
-}
-
-// ── Minimal editor input style (no dedicated CSS class exists) ───────────────
-
-const EDITOR_INPUT = {
-  width: '100%',
-  padding: '12px 14px',
-  border: '1px solid var(--line)',
-  borderRadius: 10,
-  fontSize: 16,
-  fontFamily: 'inherit',
-  boxSizing: 'border-box',
-  background: 'var(--card)',
-  color: 'var(--ink)',
-};
-
-// ═════════════════════════════════════════════════════════════════════════════
-// Cook component
-// ═════════════════════════════════════════════════════════════════════════════
+/* ═════════════════════════════════════════════════════════════════════════ */
+/* Cook                                                                     */
+/* ═════════════════════════════════════════════════════════════════════════ */
 
 export default function Cook({
   items, dishes, plans, logs, groceryItems,
-  pantryItem, prefsItem, saveItem, deleteWithUndo,
+  pantryItem, prefsItem, saveItem, deleteWithUndo, showToast,
 }) {
-  // ── State ────────────────────────────────────────────────────────────────
-  const [mode, setMode]               = useState('all');        // 'all' | 'kitchen'
+  /* ── State ─────────────────────────────────────────────────────────────── */
+
+  const [mode, setMode]               = useState('all');
   const [query, setQuery]             = useState('');
-  const [mealFilter, setMealFilter]   = useState('all');        // 'all' | meal key
-  const [cuisineFilter, setCuisineFilter] = useState(null);     // null | cuisine key
+  const [mealFilter, setMealFilter]   = useState('all');
+  const [cuisineFilter, setCuisineFilter] = useState(null);
   const [showAllDiet, setShowAllDiet] = useState(false);
-  const [expandedId, setExpandedId]   = useState(null);
+
+  // Edit sheet
+  const [editDishId, setEditDishId]   = useState(null);
+  const [editValues, setEditValues]   = useState({});
+
+  // Add composer
   const [addingDish, setAddingDish]   = useState(false);
   const [addName, setAddName]         = useState('');
   const [addMeal, setAddMeal]         = useState('breakfast');
-  const [menuOpen, setMenuOpen]       = useState(false);
+
+  // Kitchen mode
   const [pantryInput, setPantryInput] = useState('');
   const [staplesOn, setStaplesOn]     = useState(() => {
-    try { const v = localStorage.getItem('ad:staples'); return v === null ? true : v === 'true'; }
-    catch { return true; }
+    try {
+      const v = localStorage.getItem('ad:staples');
+      return v === null ? true : v === 'true';
+    } catch { return true; }
   });
-  const [showPlanPicker, setShowPlanPicker] = useState(null);   // null | { dishName, meal }
+
+  // Plan picker sheet
+  const [showPlanPicker, setShowPlanPicker] = useState(null);
   const [planDay, setPlanDay]         = useState(() => localDateStr());
   const [planMeal, setPlanMeal]       = useState('lunch');
+
+  // Log sheet (kitchen mode "Log it" — B4 fix)
+  const [showLogSheet, setShowLogSheet] = useState(false);
+  const [logValues, setLogValues]     = useState({});
 
   // Persist staples toggle
   useEffect(() => {
     try { localStorage.setItem('ad:staples', String(staplesOn)); } catch { /* noop */ }
   }, [staplesOn]);
 
-  // Reset overflow menu when the expanded card changes
-  useEffect(() => { setMenuOpen(false); }, [expandedId]);
+  /* ── Derived ───────────────────────────────────────────────────────────── */
 
-  // ── Derived helpers ──────────────────────────────────────────────────────
-  const userDiet     = prefsItem?.diet || 'all';
-  const favCuisines  = prefsItem?.cuisines || [];
-  const pantryItems  = pantryItem?.items || [];
-  const allowedDiets = useMemo(() => new Set(DIET_ALLOWED[userDiet] || DIET_ALLOWED.all), [userDiet]);
+  const userDiet    = prefsItem?.diet || 'all';
+  const favCuisines = prefsItem?.cuisines || [];
+  const pantryItems = pantryItem?.items || [];
+  const allowedDiets = useMemo(
+    () => new Set(DIET_ALLOWED[userDiet] || DIET_ALLOWED.all),
+    [userDiet],
+  );
+  const activeDishes = useMemo(
+    () => dishes.filter((d) => !d.deleted),
+    [dishes],
+  );
 
-  // Active dishes (not deleted)
-  const activeDishes = useMemo(() => dishes.filter((d) => !d.deleted), [dishes]);
+  // Flat cuisine options for the Composer select
+  const cuisineOptions = useMemo(() => {
+    const opts = [];
+    for (const c of CUISINES) {
+      opts.push({ value: c.key, label: c.label });
+      if (c.subs) {
+        for (const s of c.subs) {
+          opts.push({ value: s.key, label: '  ' + s.label });
+        }
+      }
+    }
+    return opts;
+  }, []);
 
-  // ── Search helper ────────────────────────────────────────────────────────
+  /* ── Search ────────────────────────────────────────────────────────────── */
+
   const matchesQuery = useCallback((dish) => {
     if (!query.trim()) return true;
     const q = normalize(query);
@@ -125,7 +146,8 @@ export default function Cook({
     return false;
   }, [query]);
 
-  // ── "All dishes" filtered list ───────────────────────────────────────────
+  /* ── All-dishes filtered list ──────────────────────────────────────────── */
+
   const allDishesFiltered = useMemo(() => {
     let pool = activeDishes.filter(matchesQuery);
     if (mealFilter !== 'all') pool = pool.filter((d) => d.meal === mealFilter);
@@ -147,7 +169,8 @@ export default function Cook({
     return groups;
   }, [allDishesFiltered]);
 
-  // ── Cuisine chips (regions that have dishes, favorites first) ────────────
+  /* ── Cuisine chips (regions that have dishes, favourites first) ─────── */
+
   const cuisinesWithDishes = useMemo(() => {
     const keys = new Set(activeDishes.map((d) => d.cuisine).filter(Boolean));
     const favSet = new Set(favCuisines);
@@ -175,7 +198,7 @@ export default function Cook({
     return out;
   }, [activeDishes]);
 
-  // Which region is currently active in the cuisine filter?
+  // Which region is currently active?
   const activeRegionKey = useMemo(() => {
     if (!cuisineFilter) return null;
     if (CUISINES.find((c) => c.key === cuisineFilter)) return cuisineFilter;
@@ -183,16 +206,14 @@ export default function Cook({
     return parent?.key || null;
   }, [cuisineFilter]);
 
-  // ── Kitchen mode: match dishes against pantry ────────────────────────────
+  /* ── Kitchen mode: match dishes against pantry ─────────────────────────── */
+
   const kitchenResults = useMemo(() => {
     if (mode !== 'kitchen') return { full: [], partial: [] };
 
     let pool = activeDishes.filter(matchesQuery);
-
-    // Diet hard filter
     pool = pool.filter((d) => allowedDiets.has(d.diet || 'veg'));
 
-    // Cuisine: specific filter, or favorites if none set
     if (cuisineFilter) {
       const expanded = expandCuisines([cuisineFilter]);
       pool = pool.filter((d) => expanded.has(d.cuisine));
@@ -203,20 +224,85 @@ export default function Cook({
 
     const full = [];
     const partial = [];
-
     for (const dish of pool) {
       const result = matchDish(dish, pantryItems, { staplesOn });
       if (result.status === 'full') full.push({ dish, match: result });
       else if (result.status === 'partial') partial.push({ dish, match: result });
     }
-
     partial.sort((a, b) => b.match.score - a.match.score);
     return { full, partial };
   }, [mode, activeDishes, matchesQuery, allowedDiets, cuisineFilter, favCuisines, pantryItems, staplesOn]);
 
-  // ── Handlers ─────────────────────────────────────────────────────────────
+  /* ── Edit-sheet field definitions ──────────────────────────────────────── */
 
-  const handleAddDish = () => {
+  const editFields = useMemo(() => [
+    { key: 'name', label: 'Dish name', type: 'text', placeholder: 'Dish name' },
+    { key: 'ingredients', label: 'Ingredients (comma-separated)', type: 'textarea', placeholder: 'rice, toor dal, tomato...' },
+    { key: 'ref', label: 'Reference', type: 'text', placeholder: 'Book, URL, or person' },
+    { key: 'notes', label: 'Notes', type: 'textarea', placeholder: 'Prep notes...' },
+    { key: 'meal', label: 'Meal', type: 'select', options: MEAL_OPTIONS },
+    { key: 'cuisine', label: 'Cuisine', type: 'select', options: cuisineOptions },
+    { key: 'diet', label: 'Diet', type: 'select', options: DIET_OPTIONS },
+    { key: 'tags', label: 'Tags (comma-separated)', type: 'text', placeholder: 'spicy, one-pot, quick...' },
+  ], [cuisineOptions]);
+
+  // Log sheet field definitions
+  const logFields = useMemo(() => [
+    { key: 'dish', label: 'Dish', type: 'text', placeholder: 'Dish name' },
+    { key: 'meal', label: 'Meal', type: 'select', options: MEAL_OPTIONS },
+    { key: 'mode', label: 'Mode', type: 'select', options: MODE_OPTIONS },
+    { key: 'cost', label: 'Cost', type: 'number', placeholder: '0' },
+    { key: 'notes', label: 'Notes', type: 'text', placeholder: '' },
+  ], []);
+
+  /* ── Handlers ──────────────────────────────────────────────────────────── */
+
+  const openEditSheet = useCallback((dish) => {
+    setEditDishId(dish.id);
+    setEditValues({
+      name: dish.name || '',
+      ingredients: (dish.ingredients || []).join(', '),
+      ref: dish.ref || '',
+      notes: dish.notes || '',
+      meal: dish.meal || 'lunch',
+      cuisine: dish.cuisine || '',
+      diet: dish.diet || 'veg',
+      tags: (dish.tags || []).join(', '),
+    });
+  }, []);
+
+  const closeEditSheet = useCallback(() => {
+    setEditDishId(null);
+    setEditValues({});
+  }, []);
+
+  const saveEditDish = useCallback(() => {
+    const dish = activeDishes.find((d) => d.id === editDishId);
+    if (!dish) { closeEditSheet(); return; }
+    saveItem({
+      ...dish,
+      name: editValues.name.trim() || dish.name,
+      ingredients: editValues.ingredients
+        .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean),
+      ref: editValues.ref.trim(),
+      notes: editValues.notes.trim(),
+      meal: editValues.meal || dish.meal,
+      cuisine: editValues.cuisine || dish.cuisine,
+      diet: editValues.diet || dish.diet,
+      tags: editValues.tags
+        .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean),
+    });
+    closeEditSheet();
+    if (showToast) showToast('Dish saved');
+  }, [activeDishes, editDishId, editValues, saveItem, closeEditSheet, showToast]);
+
+  const deleteEditDish = useCallback(() => {
+    const dish = activeDishes.find((d) => d.id === editDishId);
+    if (dish) deleteWithUndo(dish);
+    closeEditSheet();
+  }, [activeDishes, editDishId, deleteWithUndo, closeEditSheet]);
+
+  const handleAddDish = useCallback(() => {
     const name = addName.trim();
     if (!name) return;
     const dish = newItem({
@@ -233,10 +319,11 @@ export default function Cook({
     saveItem(dish);
     setAddName('');
     setAddingDish(false);
-    setExpandedId(dish.id);
-  };
+    // Immediately open the edit Sheet for the new dish
+    openEditSheet(dish);
+  }, [addName, addMeal, favCuisines, saveItem, openEditSheet]);
 
-  const handlePantryAdd = (text) => {
+  const handlePantryAdd = useCallback((text) => {
     const trimmed = text.trim().toLowerCase();
     if (!trimmed) return;
     if (pantryItems.some((i) => normalize(i) === normalize(trimmed))) return;
@@ -246,16 +333,16 @@ export default function Cook({
     } else {
       saveItem(newItem({ id: 'pantry', type: 'pantry', items: updated }));
     }
-  };
+  }, [pantryItems, pantryItem, saveItem]);
 
-  const handlePantryRemove = (item) => {
+  const handlePantryRemove = useCallback((item) => {
     const updated = pantryItems.filter((i) => i !== item);
     if (pantryItem) {
       saveItem({ ...pantryItem, items: updated });
     }
-  };
+  }, [pantryItems, pantryItem, saveItem]);
 
-  const handlePlanDish = (dishName, day, meal) => {
+  const handlePlanDish = useCallback((dishName, day, meal) => {
     const planId = `plan-${day}`;
     const existing = plans.find((p) => p.id === planId && !p.deleted);
     if (existing) {
@@ -269,38 +356,53 @@ export default function Cook({
       }));
     }
     setShowPlanPicker(null);
-  };
+    if (showToast) showToast('Added to plan');
+  }, [plans, saveItem, showToast]);
 
-  const handleLogDish = (dishName, meal) => {
+  // B4 fix: "Log it" opens a log Sheet pre-filled, not silent write
+  const openLogSheet = useCallback((dishName, meal) => {
+    setLogValues({
+      dish: dishName,
+      meal: meal || 'lunch',
+      mode: 'home',
+      cost: '',
+      notes: '',
+    });
+    setShowLogSheet(true);
+  }, []);
+
+  const saveLog = useCallback(() => {
     saveItem(newItem({
       type: 'log',
       date: localDateStr(),
-      meal: meal || 'lunch',
-      mode: 'home',
-      dish: dishName,
-      cost: 0,
-      notes: '',
+      meal: logValues.meal || 'lunch',
+      mode: logValues.mode || 'home',
+      dish: logValues.dish || '',
+      cost: Number(logValues.cost) || 0,
+      notes: logValues.notes || '',
     }));
-  };
+    setShowLogSheet(false);
+    setLogValues({});
+    if (showToast) showToast('Meal logged');
+  }, [logValues, saveItem, showToast]);
 
-  const handleFieldUpdate = (dish, field, value) => {
-    saveItem({ ...dish, [field]: value });
-  };
+  const openPlanPicker = useCallback((dishName, meal) => {
+    setShowPlanPicker({ dishName, meal });
+    setPlanDay(localDateStr());
+    setPlanMeal(meal || 'lunch');
+  }, []);
 
   // Diet toggle label
-  const dietToggleLabel = showAllDiet
-    ? 'Diet only'
-    : userDiet === 'veg' ? 'Show non-veg' : 'Show all';
+  const dietToggleLabel = showAllDiet ? 'Showing all' : 'Show all';
 
-  // ── Render ───────────────────────────────────────────────────────────────
+  /* ── Render ────────────────────────────────────────────────────────────── */
+
   return (
-    <div className="screen">
+    <div>
 
       {/* ── Search bar ── */}
       <div className="search">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-          <circle cx="11" cy="11" r="7" /><path d="m21 21-4.35-4.35" />
-        </svg>
+        <SearchIcon size={17} />
         <input
           type="text"
           placeholder="Search dishes, ingredients, cuisines..."
@@ -308,21 +410,24 @@ export default function Cook({
           onChange={(e) => setQuery(e.target.value)}
         />
         {query && (
-          <button className="search-x" onClick={() => setQuery('')}>&#x2715;</button>
+          <button
+            type="button"
+            className="search-x"
+            onClick={() => setQuery('')}
+            aria-label="Clear search"
+          >
+            &#x2715;
+          </button>
         )}
       </div>
 
       {/* ── Mode toggle ── */}
-      <div className="seg" style={{ marginTop: 10 }}>
-        {[{ key: 'all', label: 'All dishes' }, { key: 'kitchen', label: 'From my kitchen' }].map(({ key, label }) => (
-          <button
-            key={key}
-            className={mode === key ? 'on' : undefined}
-            onClick={() => { setMode(key); setCuisineFilter(null); }}
-          >
-            {label}
-          </button>
-        ))}
+      <div className="section">
+        <SegRow
+          items={MODE_ITEMS}
+          value={mode}
+          onChange={(key) => { setMode(key); setCuisineFilter(null); }}
+        />
       </div>
 
       {/* ════════════════════════════════════════════════════════════════════ */}
@@ -330,51 +435,60 @@ export default function Cook({
       {/* ════════════════════════════════════════════════════════════════════ */}
       {mode === 'all' && (
         <>
-          {/* Meal filter */}
-          <div className="seg wrap" style={{ marginTop: 10 }}>
-            {['all', 'breakfast', 'lunch', 'dinner'].map((m) => (
-              <button key={m} className={mealFilter === m ? 'on' : undefined} onClick={() => setMealFilter(m)}>
-                {m === 'all' ? 'All' : cap(m)}
-              </button>
-            ))}
-          </div>
-
-          {/* Cuisine filter */}
+          {/* ── Cuisine filter row 1: regions ── */}
           <div className="group-toggle">
             <button
-              className={cuisineFilter === null ? 'on' : undefined}
+              type="button"
+              className={cuisineFilter === null ? 'on' : ''}
               onClick={() => setCuisineFilter(null)}
             >
               All
             </button>
             {cuisinesWithDishes.map((region) => (
-              <React.Fragment key={region.key}>
-                <button
-                  className={activeRegionKey === region.key ? 'on' : undefined}
-                  onClick={() => setCuisineFilter(cuisineFilter === region.key ? null : region.key)}
-                >
-                  {region.label}
-                </button>
-                {/* Sub-cuisine chips (indented, visible when region is active) */}
-                {activeRegionKey === region.key && (subsWithDishes[region.key] || []).map((sub) => (
-                  <button
-                    key={sub.key}
-                    className={cuisineFilter === sub.key ? 'on' : undefined}
-                    onClick={() => setCuisineFilter(cuisineFilter === sub.key ? region.key : sub.key)}
-                    style={{ marginLeft: 12 }}
-                  >
-                    {sub.label}
-                  </button>
-                ))}
-              </React.Fragment>
+              <button
+                key={region.key}
+                type="button"
+                className={activeRegionKey === region.key ? 'on' : ''}
+                onClick={() => setCuisineFilter(
+                  cuisineFilter === region.key ? null : region.key,
+                )}
+              >
+                {region.label}
+              </button>
             ))}
           </div>
 
-          {/* Diet toggle */}
+          {/* ── Cuisine filter row 2: sub-cuisines (only when region active) ── */}
+          {activeRegionKey && (subsWithDishes[activeRegionKey] || []).length > 0 && (
+            <div className="group-toggle">
+              <button
+                type="button"
+                className={cuisineFilter === activeRegionKey ? 'on' : ''}
+                onClick={() => setCuisineFilter(activeRegionKey)}
+              >
+                All {cuisineLabel(activeRegionKey)}
+              </button>
+              {(subsWithDishes[activeRegionKey] || []).map((sub) => (
+                <button
+                  key={sub.key}
+                  type="button"
+                  className={cuisineFilter === sub.key ? 'on' : ''}
+                  onClick={() => setCuisineFilter(
+                    cuisineFilter === sub.key ? activeRegionKey : sub.key,
+                  )}
+                >
+                  {sub.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* ── Diet toggle ── */}
           {userDiet !== 'all' && (
             <div className="group-toggle">
               <button
-                className={showAllDiet ? 'on' : undefined}
+                type="button"
+                className={showAllDiet ? 'on' : ''}
                 onClick={() => setShowAllDiet(!showAllDiet)}
               >
                 {dietToggleLabel}
@@ -382,48 +496,66 @@ export default function Cook({
             </div>
           )}
 
-          {/* ── Inline add composer ── */}
-          {addingDish ? (
-            <div className="card" style={{ marginTop: 10 }}>
-              <div className="add-composer">
-                <div className="dot" />
-                <input
-                  type="text"
-                  placeholder="Dish name"
-                  value={addName}
-                  onChange={(e) => setAddName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleAddDish();
-                    if (e.key === 'Escape') setAddingDish(false);
-                  }}
-                  autoFocus
-                />
-              </div>
-              <div className="seg" style={{ marginTop: 8 }}>
-                {['breakfast', 'lunch', 'dinner'].map((m) => (
-                  <button key={m} className={addMeal === m ? 'on' : undefined} onClick={() => setAddMeal(m)}>
-                    {cap(m)}
+          {/* ── Meal filter ── */}
+          <div className="section">
+            <SegRow
+              items={MEAL_FILTER_ITEMS}
+              value={mealFilter}
+              onChange={setMealFilter}
+            />
+          </div>
+
+          {/* ── Add composer ── */}
+          <div className="section">
+            {addingDish ? (
+              <div className="card">
+                <div className="add-composer">
+                  <div className="dot" />
+                  <input
+                    type="text"
+                    placeholder="Dish name"
+                    value={addName}
+                    onChange={(e) => setAddName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleAddDish();
+                      if (e.key === 'Escape') setAddingDish(false);
+                    }}
+                    autoFocus
+                  />
+                </div>
+                <div className="section">
+                  <SegRow
+                    items={MEAL_SEG_ITEMS}
+                    value={addMeal}
+                    onChange={setAddMeal}
+                  />
+                </div>
+                <div className="btn-row">
+                  <button type="button" className="btn ghost" onClick={() => setAddingDish(false)}>
+                    Cancel
                   </button>
-                ))}
+                  <button type="button" className="btn accent" onClick={handleAddDish}>
+                    Add
+                  </button>
+                </div>
               </div>
-              <div className="btn-row">
-                <button className="btn ghost" onClick={() => setAddingDish(false)}>Cancel</button>
-                <button className="btn accent" onClick={handleAddDish}>Add</button>
-              </div>
-            </div>
-          ) : (
-            <button className="add-task" onClick={() => setAddingDish(true)}>
-              <span className="plus">+</span>
-              Add dish
-            </button>
-          )}
+            ) : (
+              <button
+                type="button"
+                className="add-task"
+                onClick={() => setAddingDish(true)}
+              >
+                <span className="plus">+</span>
+                Add dish
+              </button>
+            )}
+          </div>
 
           {/* ── Dish cards grouped by meal ── */}
           {['breakfast', 'lunch', 'dinner'].map((meal) => {
             const cards = dishesByMeal[meal];
             if (mealFilter !== 'all' && mealFilter !== meal) return null;
             if (!cards || cards.length === 0) return null;
-
             return (
               <div key={meal} className="section">
                 <span className="eyebrow">{cap(meal)}</span>
@@ -432,13 +564,7 @@ export default function Cook({
                     <DishCard
                       key={dish.id}
                       dish={dish}
-                      expanded={expandedId === dish.id}
-                      onToggle={() => setExpandedId(expandedId === dish.id ? null : dish.id)}
-                      menuOpen={menuOpen && expandedId === dish.id}
-                      onMenuToggle={() => setMenuOpen(!menuOpen)}
-                      saveItem={saveItem}
-                      deleteWithUndo={deleteWithUndo}
-                      onFieldUpdate={handleFieldUpdate}
+                      onTap={() => openEditSheet(dish)}
                     />
                   ))}
                 </div>
@@ -447,7 +573,7 @@ export default function Cook({
           })}
 
           {allDishesFiltered.length === 0 && (
-            <p className="empty">No dishes found.</p>
+            <EmptyState message="No dishes found." />
           )}
         </>
       )}
@@ -457,84 +583,99 @@ export default function Cook({
       {/* ════════════════════════════════════════════════════════════════════ */}
       {mode === 'kitchen' && (
         <>
-          {/* Pantry chip input */}
+          {/* ── Pantry chip input ── */}
           <div className="section">
             <span className="eyebrow">Your pantry</span>
-            <div className="pantry-input" style={{ marginTop: 8 }}>
-              {pantryItems.map((item, idx) => (
-                <span key={`${item}-${idx}`} className="ing-pill">
-                  {item}
-                  <button
-                    className="x"
-                    onClick={() => handlePantryRemove(item)}
-                    aria-label={`Remove ${item}`}
-                  >
-                    &#x2715;
-                  </button>
+            <div className="list">
+              <div className="pantry-input">
+                {pantryItems.map((item, idx) => (
+                  <span key={`${item}-${idx}`} className="ing-pill">
+                    {item}
+                    <button
+                      type="button"
+                      className="x"
+                      onClick={() => handlePantryRemove(item)}
+                      aria-label={`Remove ${item}`}
+                    >
+                      &#x2715;
+                    </button>
+                  </span>
+                ))}
+                <input
+                  type="text"
+                  placeholder="Add ingredient..."
+                  value={pantryInput}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val.includes(',')) {
+                      const parts = val.split(',');
+                      const last = parts.pop();
+                      for (const p of parts) {
+                        const trimmed = p.trim();
+                        if (trimmed) handlePantryAdd(trimmed);
+                      }
+                      setPantryInput(last.trimStart());
+                    } else {
+                      setPantryInput(val);
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      const parts = pantryInput.split(',');
+                      for (const p of parts) {
+                        const trimmed = p.trim();
+                        if (trimmed) handlePantryAdd(trimmed);
+                      }
+                      setPantryInput('');
+                    }
+                  }}
+                />
+              </div>
+
+              {/* Staples toggle */}
+              <div className="row">
+                <label className="row">
+                  <input
+                    type="checkbox"
+                    checked={staplesOn}
+                    onChange={() => setStaplesOn(!staplesOn)}
+                  />
+                  I have the basics
+                </label>
+                <span className="lead">
+                  ({STAPLES.slice(0, 4).join(', ')}, ...)
                 </span>
-              ))}
-              <input
-                type="text"
-                placeholder="Add ingredient..."
-                value={pantryInput}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  if (val.includes(',')) {
-                    const parts = val.split(',');
-                    const last = parts.pop();
-                    for (const p of parts) {
-                      const trimmed = p.trim();
-                      if (trimmed) handlePantryAdd(trimmed);
-                    }
-                    setPantryInput(last.trimStart());
-                  } else {
-                    setPantryInput(val);
-                  }
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    const parts = pantryInput.split(',');
-                    for (const p of parts) {
-                      const trimmed = p.trim();
-                      if (trimmed) handlePantryAdd(trimmed);
-                    }
-                    setPantryInput('');
-                  }
-                }}
-              />
+              </div>
             </div>
           </div>
 
-          {/* Staples toggle */}
-          <div className="row" style={{ marginTop: 8 }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, cursor: 'pointer' }}>
-              <input type="checkbox" checked={staplesOn} onChange={() => setStaplesOn(!staplesOn)} />
-              I have the basics
-            </label>
-            <span className="lead">({STAPLES.slice(0, 4).join(', ')}, ...)</span>
-          </div>
-
-          {/* Cuisine chips for kitchen mode */}
+          {/* ── Cuisine filter chips ── */}
           <div className="group-toggle">
             <button
-              className={cuisineFilter === null ? 'on' : undefined}
+              type="button"
+              className={cuisineFilter === null ? 'on' : ''}
               onClick={() => setCuisineFilter(null)}
-              title={favCuisines.length > 0 ? 'Filter to your favourite cuisines from Settings' : 'Show all cuisines'}
+              title={favCuisines.length > 0
+                ? 'Filter to your favourite cuisines from Settings'
+                : 'Show all cuisines'}
             >
               {favCuisines.length > 0 ? 'Favourites' : 'All'}
             </button>
             {cuisinesWithDishes.map((region) => (
               <button
                 key={region.key}
-                className={cuisineFilter === region.key ? 'on' : undefined}
-                onClick={() => setCuisineFilter(cuisineFilter === region.key ? null : region.key)}
+                type="button"
+                className={cuisineFilter === region.key ? 'on' : ''}
+                onClick={() => setCuisineFilter(
+                  cuisineFilter === region.key ? null : region.key,
+                )}
               >
                 {region.label}
               </button>
             ))}
           </div>
           {cuisineFilter === null && favCuisines.length > 0 && (
-            <span className="lead" style={{ fontSize: 11, marginTop: 2 }}>
+            <span className="lead">
               Showing favourite cuisines (from Settings)
             </span>
           )}
@@ -542,7 +683,7 @@ export default function Cook({
           {/* ── Results: Can cook now ── */}
           {kitchenResults.full.length > 0 && (
             <div className="section">
-              <span className="eyebrow" style={{ color: 'var(--success)' }}>Can cook now</span>
+              <span className="eyebrow">Can cook now</span>
               <div className="list">
                 {kitchenResults.full.map(({ dish, match }) => (
                   <KitchenCard
@@ -550,12 +691,8 @@ export default function Cook({
                     dish={dish}
                     match={match}
                     variant="full"
-                    onPlan={() => {
-                      setShowPlanPicker({ dishName: dish.name, meal: dish.meal });
-                      setPlanDay(localDateStr());
-                      setPlanMeal(dish.meal || 'lunch');
-                    }}
-                    onLog={() => handleLogDish(dish.name, dish.meal)}
+                    onPlan={() => openPlanPicker(dish.name, dish.meal)}
+                    onLog={() => openLogSheet(dish.name, dish.meal)}
                   />
                 ))}
               </div>
@@ -573,12 +710,7 @@ export default function Cook({
                     dish={dish}
                     match={match}
                     variant="partial"
-                    onPlan={() => {
-                      setShowPlanPicker({ dishName: dish.name, meal: dish.meal });
-                      setPlanDay(localDateStr());
-                      setPlanMeal(dish.meal || 'lunch');
-                    }}
-                    onLog={() => handleLogDish(dish.name, dish.meal)}
+                    onPlan={() => openPlanPicker(dish.name, dish.meal)}
                   />
                 ))}
               </div>
@@ -586,253 +718,178 @@ export default function Cook({
           )}
 
           {/* Empty states */}
-          {kitchenResults.full.length === 0 && kitchenResults.partial.length === 0 && pantryItems.length > 0 && (
-            <p className="empty">No matching dishes found. Try adding more ingredients.</p>
+          {kitchenResults.full.length === 0
+            && kitchenResults.partial.length === 0
+            && pantryItems.length > 0 && (
+            <EmptyState message="No matching dishes found. Try adding more ingredients." />
           )}
           {pantryItems.length === 0 && (
-            <p className="empty">Add ingredients above to see what you can cook.</p>
+            <EmptyState message="Add ingredients above to see what you can cook." />
           )}
         </>
       )}
 
-      {/* Bottom spacer for tab bar */}
-      <div style={{ height: 20 }} />
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      {/* EDIT DISH SHEET (B3 fix: Sheet + Composer, not in-place expansion) */}
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      {editDishId && (
+        <Sheet title={editValues.name || 'Edit dish'} onClose={closeEditSheet}>
+          <Composer
+            fields={editFields}
+            values={editValues}
+            onChange={setEditValues}
+            onSave={saveEditDish}
+            onCancel={closeEditSheet}
+            onDelete={deleteEditDish}
+          />
+        </Sheet>
+      )}
 
-      {/* ── Plan picker sheet (overlay) ── */}
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      {/* LOG SHEET (B4 fix: opens pre-filled Sheet instead of silent write) */}
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      {showLogSheet && (
+        <Sheet title="Log meal" onClose={() => setShowLogSheet(false)}>
+          <Composer
+            fields={logFields}
+            values={logValues}
+            onChange={setLogValues}
+            onSave={saveLog}
+            onCancel={() => setShowLogSheet(false)}
+            saveLabel="Log it"
+          />
+        </Sheet>
+      )}
+
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      {/* PLAN PICKER SHEET                                                  */}
+      {/* ════════════════════════════════════════════════════════════════════ */}
       {showPlanPicker && (
-        <div className="overlay" onClick={() => setShowPlanPicker(null)}>
-          <div className="panel" onClick={(e) => e.stopPropagation()}>
-            <span className="editor-title-read">
-              Plan &ldquo;{showPlanPicker.dishName}&rdquo;
-            </span>
-
+        <Sheet
+          title={'Plan “' + showPlanPicker.dishName + '”'}
+          onClose={() => setShowPlanPicker(null)}
+        >
+          <div className="form-stack">
             <span className="eyebrow">Day</span>
             <div className="seg wrap">
               {Array.from({ length: 7 }, (_, i) => addDays(localDateStr(), i)).map((d) => (
-                <button key={d} className={planDay === d ? 'on' : undefined} onClick={() => setPlanDay(d)}>
+                <button
+                  key={d}
+                  type="button"
+                  className={planDay === d ? 'on' : ''}
+                  onClick={() => setPlanDay(d)}
+                >
                   {dayLabel(d)}
                 </button>
               ))}
             </div>
 
             <span className="eyebrow">Meal</span>
-            <div className="seg">
-              {['breakfast', 'lunch', 'dinner'].map((m) => (
-                <button key={m} className={planMeal === m ? 'on' : undefined} onClick={() => setPlanMeal(m)}>
-                  {cap(m)}
-                </button>
-              ))}
-            </div>
+            <SegRow
+              items={MEAL_SEG_ITEMS}
+              value={planMeal}
+              onChange={setPlanMeal}
+            />
 
-            <button
-              className="btn accent wide"
-              onClick={() => handlePlanDish(showPlanPicker.dishName, planDay, planMeal)}
-            >
-              Add to plan
-            </button>
+            <div className="btn-row">
+              <button
+                type="button"
+                className="btn accent"
+                onClick={() => handlePlanDish(showPlanPicker.dishName, planDay, planMeal)}
+              >
+                Add to plan
+              </button>
+            </div>
           </div>
-        </div>
+        </Sheet>
       )}
     </div>
   );
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
-// DishCard — expandable catalog card (All dishes mode)
-// Uses .card + .task pattern for expand-in-place behavior.
-// ═════════════════════════════════════════════════════════════════════════════
+/* ═════════════════════════════════════════════════════════════════════════ */
+/* DishCard — browse card (All dishes mode)                                */
+/* Card tap = edit Sheet (B3); no in-place expansion, no overflow menu.    */
+/* ═════════════════════════════════════════════════════════════════════════ */
 
-function DishCard({ dish, expanded, onToggle, menuOpen, onMenuToggle, saveItem, deleteWithUndo, onFieldUpdate }) {
+function DishCard({ dish, onTap }) {
   const preview = (dish.ingredients || []).slice(0, 4);
   const moreCount = Math.max(0, (dish.ingredients || []).length - 4);
 
   return (
-    <div className={`card task${expanded ? ' open' : ''}`}>
-      {/* ── Summary row ── */}
-      <div className="task-row" onClick={onToggle}>
+    <div
+      className="card"
+      onClick={onTap}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onTap(); }
+      }}
+      aria-label={`Edit ${dish.name}`}
+    >
+      <div className="task-row">
         <DietDot diet={dish.diet || 'veg'} />
         <div className="task-main">
-          <div className="task-title">{dish.name}</div>
+          <span className="dish-name">{dish.name}</span>
           <div className="task-sub">
             {dish.cuisine && (
-              <span className="chip cuisine">{cuisineLabel(dish.cuisine)}</span>
+              <Chip type="cuisine">{cuisineLabel(dish.cuisine)}</Chip>
             )}
             {preview.length > 0 && (
               <span className="lead">
-                {preview.join(', ')}{moreCount > 0 ? `, +${moreCount} more` : ''}
+                {preview.join(', ')}
+                {moreCount > 0 ? `, +${moreCount} more` : ''}
               </span>
             )}
           </div>
           {(dish.tags || []).length > 0 && (
             <div className="task-sub">
               {dish.tags.map((tag) => (
-                <span key={tag} className="chip plain">#{tag}</span>
+                <Chip key={tag} type="plain">#{tag}</Chip>
               ))}
             </div>
           )}
         </div>
-        <span className="chev">&#x203A;</span>
       </div>
-
-      {/* ── Expanded editor ── */}
-      {expanded && (
-        <div className="task-detail" onClick={(e) => e.stopPropagation()}>
-          {/* Ingredients */}
-          <span className="eyebrow">Ingredients</span>
-          <textarea
-            key={`ing-${dish.id}-${dish.updated_at}`}
-            defaultValue={(dish.ingredients || []).join(', ')}
-            onBlur={(e) => {
-              const ings = e.target.value.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
-              if (JSON.stringify(ings) !== JSON.stringify(dish.ingredients || [])) {
-                onFieldUpdate(dish, 'ingredients', ings);
-              }
-            }}
-            placeholder="rice, toor dal, tomato..."
-            rows={2}
-            style={{ ...EDITOR_INPUT, resize: 'vertical' }}
-          />
-
-          {/* Reference */}
-          <span className="eyebrow" style={{ marginTop: 8 }}>Reference</span>
-          <input
-            type="text"
-            key={`ref-${dish.id}-${dish.updated_at}`}
-            defaultValue={dish.ref || ''}
-            onBlur={(e) => {
-              if (e.target.value !== (dish.ref || '')) onFieldUpdate(dish, 'ref', e.target.value);
-            }}
-            placeholder="Book, URL, or person"
-            style={EDITOR_INPUT}
-          />
-
-          {/* Notes */}
-          <span className="eyebrow" style={{ marginTop: 8 }}>Notes</span>
-          <textarea
-            key={`note-${dish.id}-${dish.updated_at}`}
-            defaultValue={dish.notes || ''}
-            onBlur={(e) => {
-              if (e.target.value !== (dish.notes || '')) onFieldUpdate(dish, 'notes', e.target.value);
-            }}
-            placeholder="Prep notes..."
-            rows={2}
-            style={{ ...EDITOR_INPUT, resize: 'vertical' }}
-          />
-
-          {/* Meal selector */}
-          <span className="eyebrow" style={{ marginTop: 8 }}>Meal</span>
-          <div className="seg">
-            {['breakfast', 'lunch', 'dinner'].map((m) => (
-              <button
-                key={m}
-                className={dish.meal === m ? 'on' : undefined}
-                onClick={() => onFieldUpdate(dish, 'meal', m)}
-              >
-                {cap(m)}
-              </button>
-            ))}
-          </div>
-
-          {/* Cuisine selector */}
-          <span className="eyebrow" style={{ marginTop: 8 }}>Cuisine</span>
-          <select
-            value={dish.cuisine || ''}
-            onChange={(e) => onFieldUpdate(dish, 'cuisine', e.target.value)}
-            style={EDITOR_INPUT}
-          >
-            <option value="">Select...</option>
-            {CUISINES.map((c) => (
-              <React.Fragment key={c.key}>
-                <option value={c.key}>{c.label}</option>
-                {c.subs?.map((s) => (
-                  <option key={s.key} value={s.key}>&nbsp;&nbsp;{s.label}</option>
-                ))}
-              </React.Fragment>
-            ))}
-          </select>
-
-          {/* Diet selector */}
-          <span className="eyebrow" style={{ marginTop: 8 }}>Diet</span>
-          <div className="seg">
-            {[{ key: 'veg', label: 'Veg' }, { key: 'egg', label: 'Egg' }, { key: 'nonveg', label: 'Non-veg' }].map(({ key, label }) => (
-              <button
-                key={key}
-                className={dish.diet === key ? 'on' : undefined}
-                onClick={() => onFieldUpdate(dish, 'diet', key)}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
-              >
-                <DietDot diet={key} size={12} /> {label}
-              </button>
-            ))}
-          </div>
-
-          {/* Tags */}
-          <span className="eyebrow" style={{ marginTop: 8 }}>Tags</span>
-          <input
-            type="text"
-            key={`tags-${dish.id}-${dish.updated_at}`}
-            defaultValue={(dish.tags || []).join(', ')}
-            onBlur={(e) => {
-              const tags = e.target.value.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
-              if (JSON.stringify(tags) !== JSON.stringify(dish.tags || [])) {
-                onFieldUpdate(dish, 'tags', tags);
-              }
-            }}
-            placeholder="spicy, one-pot, quick..."
-            style={EDITOR_INPUT}
-          />
-
-          {/* Overflow menu */}
-          <div className="detail-foot">
-            <button className="overflow" onClick={onMenuToggle} aria-label="More options">
-              &#x22EF;
-            </button>
-            {menuOpen && (
-              <div className="menu">
-                <button
-                  className="danger"
-                  onClick={() => { deleteWithUndo(dish); onMenuToggle(); }}
-                >
-                  Delete
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
-// KitchenCard — result card (From my kitchen mode)
-// ═════════════════════════════════════════════════════════════════════════════
+/* ═════════════════════════════════════════════════════════════════════════ */
+/* KitchenCard — result card (From my kitchen mode)                        */
+/* Shows "have M of N" (A10) and action buttons.                           */
+/* "Log it" opens the log Sheet (B4), not silent write.                    */
+/* ═════════════════════════════════════════════════════════════════════════ */
 
 function KitchenCard({ dish, match, variant, onPlan, onLog }) {
+  const total = match.have.length + match.missing.length;
+  const haveCount = match.have.length;
+
   return (
-    <div
-      className="card"
-      style={variant === 'full' ? { borderLeft: '3px solid var(--success)' } : undefined}
-    >
+    <div className="card">
       <div className="task-row">
         <DietDot diet={dish.diet || 'veg'} />
         <div className="task-main">
-          <div className="task-title">{dish.name}</div>
+          <span className="task-title">{dish.name}</span>
           <div className="task-sub">
-            {dish.cuisine && (
-              <span className="chip cuisine">{cuisineLabel(dish.cuisine)}</span>
-            )}
-          </div>
-          {variant === 'partial' && match.missing.length > 0 && (
-            <span className="lead" style={{ color: 'var(--overdue)' }}>
-              Need: {match.missing.join(', ')}
+            <span className="lead">
+              have {haveCount} of {total}
+              {variant === 'partial' && match.missing.length > 0 && (
+                <> &middot; Need: {match.missing.join(', ')}</>
+              )}
             </span>
-          )}
+          </div>
         </div>
       </div>
-      <div className="btn-row" style={{ justifyContent: 'flex-end' }}>
-        <button className="btn small" onClick={onPlan}>Plan it &rarr;</button>
-        <button className="btn small" onClick={onLog}>Log it</button>
+      <div className="btn-row">
+        <button type="button" className="btn small" onClick={onPlan}>
+          Plan it
+        </button>
+        {variant === 'full' && onLog && (
+          <button type="button" className="btn small" onClick={onLog}>
+            Log it
+          </button>
+        )}
       </div>
     </div>
   );
