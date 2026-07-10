@@ -13,6 +13,7 @@ import Today from './tabs/Today.jsx';
 import Plan from './tabs/Plan.jsx';
 import Cook from './tabs/Cook.jsx';
 import Track from './tabs/Track.jsx';
+import Toast from './components/Toast.jsx';
 
 const store = createIdbStore();
 
@@ -128,8 +129,8 @@ export default function App() {
   const [tab, setTab] = useState('today'); // 'today' | 'plan' | 'cook' | 'track' | 'settings'
   const [mode, setMode] = useState(getMode);
   const [query, setQuery] = useState('');
-  const [undoToast, setUndoToast] = useState(null); // { item, timer }
-  const [toast, setToast] = useState(null); // simple text toast for seeding feedback
+  const [toastState, setToastState] = useState(null); // { msg, undoFn? }
+  const toastTimer = useRef(null);
   // First sync completion flag -- for onboarding gate (signed-in users wait
   // for first sync so existing Drive prefs skip the onboarding screen).
   const [firstSyncDone, setFirstSyncDone] = useState(false);
@@ -139,6 +140,12 @@ export default function App() {
     localStorage.getItem('ad_signed_in') !== '1' && localStorage.getItem('ad_skip_signin') !== '1');
 
   const goTab = (t) => { setQuery(''); setTab(t); };
+
+  const showToast = useCallback((msg, undoFn) => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToastState({ msg, undoFn });
+    toastTimer.current = setTimeout(() => setToastState(null), 5000);
+  }, []);
 
   const { auth, engine } = useMemo(() => {
     if (!clientId) return {};
@@ -185,32 +192,18 @@ export default function App() {
     const existing = partial.id ? await store.getItem(partial.id) : null;
     const item = { ...(existing || newItem({})), ...partial, updated_at: Date.now(), dirty: 1 };
     await store.putItem(item);
-    engine?.schedule();
+    if (signedIn) engine?.schedule();
     await refresh();
     return item;
   }
 
   // Delete with undo toast: tombstone immediately, show toast for 5s.
-  // One toast at a time -- new delete replaces the old one.
   function deleteWithUndo(item) {
-    // Clear any existing undo toast
-    if (undoToast) clearTimeout(undoToast.timer);
-
-    // Tombstone immediately
     saveItem({ id: item.id, deleted: true, deleted_at: Date.now() });
-
-    const timer = setTimeout(() => setUndoToast(null), 5000);
-    setUndoToast({
-      item,
-      timer,
+    const name = item.name || item.title || 'item';
+    showToast(`Deleted ${name}`, () => {
+      saveItem({ id: item.id, deleted: false, deleted_at: null });
     });
-  }
-
-  function undoDelete() {
-    if (!undoToast) return;
-    clearTimeout(undoToast.timer);
-    saveItem({ id: undoToast.item.id, deleted: false, deleted_at: null });
-    setUndoToast(null);
   }
 
   async function signIn() {
@@ -267,7 +260,7 @@ export default function App() {
 
   const statusKey = status.split(' ')[0];
 
-  const tabProps = { items, dishes, plans, logs, groceryItems, pantryItem, prefsItem, saveItem, deleteWithUndo };
+  const tabProps = { items, dishes, plans, logs, groceryItems, pantryItem, prefsItem, saveItem, deleteWithUndo, showToast };
 
   return (
     <div className="shell">
@@ -278,7 +271,12 @@ export default function App() {
             <span className="word">Aduppu</span>
           </a>
           <span className="spacer" />
-          <span className={'status ' + statusKey}>{STATUS_LABEL[status] || status}</span>
+          <span
+            className={'status ' + statusKey}
+            role={status === 'sign in to sync' ? 'button' : undefined}
+            tabIndex={status === 'sign in to sync' ? 0 : undefined}
+            onClick={status === 'sign in to sync' ? signIn : undefined}
+          >{STATUS_LABEL[status] || status}</span>
           <button
             className={'gear' + (tab === 'settings' ? ' active' : '')}
             aria-label="Settings"
@@ -305,6 +303,7 @@ export default function App() {
           items={items} dishes={dishes}
           prefsItem={prefsItem} saveItem={saveItem}
           store={store} engine={engine} refresh={refresh}
+          showToast={showToast}
         />
       )}
 
@@ -338,18 +337,7 @@ export default function App() {
         </div>
       </nav>
 
-      {/* Undo toast */}
-      {undoToast && (
-        <div className="undo-toast">
-          <span>Deleted {undoToast.item.name || undoToast.item.title || 'item'}</span>
-          <button className="btn" onClick={undoDelete}>Undo</button>
-        </div>
-      )}
-
-      {/* Simple text toast for seeding feedback */}
-      {toast && (
-        <div className="toast">{toast}</div>
-      )}
+      <Toast toast={toastState} onDismiss={() => setToastState(null)} />
     </div>
   );
 }
@@ -548,12 +536,11 @@ function CuisinePicker({ pickable, selected, expandedRegion, setExpandedRegion, 
 
 // ---- Settings Screen ----
 
-function Settings({ mode, setAppMode, signedIn, status, statusKey, onSignIn, onSignOut, items, dishes, prefsItem, saveItem, store, engine, refresh }) {
+function Settings({ mode, setAppMode, signedIn, status, statusKey, onSignIn, onSignOut, items, dishes, prefsItem, saveItem, store, engine, refresh, showToast }) {
   const [, bumpInstall] = useState(0);
   const installed = wasInstalled() || isStandalone();
   const installable = canInstall();
   const [storage, setStorage] = useState(null);
-  const [toast, setToast] = useState(null);
   const [expandedRegion, setExpandedRegion] = useState(null);
 
   const itemCount = items.filter((i) => !i.deleted).length;
@@ -572,11 +559,6 @@ function Settings({ mode, setAppMode, signedIn, status, statusKey, onSignIn, onS
 
   async function keepData() {
     try { const ok = await navigator.storage.persist(); setStorage((s) => ({ ...s, persisted: ok })); } catch { /* blocked */ }
-  }
-
-  function showToast(msg) {
-    setToast(msg);
-    setTimeout(() => setToast(null), 3000);
   }
 
   // Diet editing: widening triggers re-seed with toast.
@@ -804,7 +786,6 @@ function Settings({ mode, setAppMode, signedIn, status, statusKey, onSignIn, onS
         No accounts of ours, no analytics. <em>&#x0B85;&#x0B9F;&#x0BC1;&#x0BAA;&#x0BCD;&#x0BAA;&#x0BC1;</em> = hearth.
       </div>
 
-      {toast && <div className="toast">{toast}</div>}
     </main>
   );
 }

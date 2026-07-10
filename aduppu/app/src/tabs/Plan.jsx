@@ -269,7 +269,7 @@ export default function Plan({
   /* -- render ------------------------------------------------- */
 
   return (
-    <div className="screen">
+    <div>
 
       {/* -- Week navigation -- */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 16 }}>
