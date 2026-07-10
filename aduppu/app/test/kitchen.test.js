@@ -15,6 +15,41 @@ describe('normalize', () => {
   it('collapses multiple spaces', () => {
     expect(normalize('mustard   seeds')).toBe('mustard seed');
   });
+
+  it('resolves aliases to canonical names', () => {
+    expect(normalize('jeera')).toBe('cumin');
+    expect(normalize('aloo')).toBe('potato');
+    expect(normalize('haldi')).toBe('turmeric');
+    expect(normalize('dahi')).toBe('curd');
+    expect(normalize('paneer')).toBe('cottage cheese');
+    expect(normalize('anda')).toBe('egg');
+    expect(normalize('chawal')).toBe('rice');
+    expect(normalize('tamatar')).toBe('tomato');
+    expect(normalize('pyaaz')).toBe('onion');
+    expect(normalize('adrak')).toBe('ginger');
+    expect(normalize('lahsun')).toBe('garlic');
+  });
+
+  it('resolves oil aliases to generic oil', () => {
+    expect(normalize('coconut oil')).toBe('oil');
+    expect(normalize('gingelly oil')).toBe('oil');
+    expect(normalize('mustard oil')).toBe('oil');
+    expect(normalize('groundnut oil')).toBe('oil');
+    expect(normalize('sunflower oil')).toBe('oil');
+    expect(normalize('refined oil')).toBe('oil');
+    expect(normalize('vegetable oil')).toBe('oil');
+  });
+
+  it('applies alias after plural stripping', () => {
+    // 'Jeeras' -> lowercase -> 'jeeras' -> strip trailing s -> 'jeera' -> alias -> 'cumin'
+    expect(normalize('Jeeras')).toBe('cumin');
+  });
+
+  it('does not alias non-matching words', () => {
+    expect(normalize('rice')).toBe('rice');
+    expect(normalize('coconut')).toBe('coconut');
+    expect(normalize('wheat flour')).toBe('wheat flour');
+  });
 });
 
 describe('matchDish', () => {
@@ -100,6 +135,105 @@ describe('matchDish', () => {
   it('dish with undefined ingredients returns full', () => {
     const dish = {};
     const result = matchDish(dish, ['rice']);
+    expect(result.status).toBe('full');
+    expect(result.score).toBe(1);
+  });
+
+  // --- Alias matching tests ---
+
+  it('alias matching: pantry "jeera" matches dish ingredient "cumin"', () => {
+    const dish = { ingredients: ['cumin', 'rice'] };
+    const result = matchDish(dish, ['jeera', 'rice']);
+    expect(result.status).toBe('full');
+    expect(result.have).toContain('cumin');
+  });
+
+  it('alias matching: dish ingredient "jeera" matches pantry "cumin"', () => {
+    const dish = { ingredients: ['jeera', 'rice'] };
+    const result = matchDish(dish, ['cumin', 'rice']);
+    expect(result.status).toBe('full');
+    expect(result.have).toContain('jeera');
+  });
+
+  it('alias matching: pantry "coconut oil" matches staple "oil"', () => {
+    const dish = { ingredients: ['oil', 'rice'] };
+    const result = matchDish(dish, ['rice', 'coconut oil'], { staplesOn: true });
+    expect(result.status).toBe('full');
+    // oil is a staple, so it is auto-matched via staples
+    expect(result.have).toContain('oil');
+  });
+
+  it('alias matching: pantry "dahi" matches ingredient "curd"', () => {
+    const dish = { ingredients: ['curd'] };
+    const result = matchDish(dish, ['dahi']);
+    expect(result.status).toBe('full');
+  });
+
+  it('alias matching: pantry "anda" matches ingredient "egg"', () => {
+    const dish = { ingredients: ['egg', 'rice'] };
+    const result = matchDish(dish, ['anda', 'rice']);
+    expect(result.status).toBe('full');
+    expect(result.have).toContain('egg');
+  });
+
+  it('alias matching: oil types resolve to staple oil', () => {
+    // When user has "mustard oil" in pantry, dishes needing "oil" (a staple) match
+    const dish = { ingredients: ['salt', 'oil', 'potato'] };
+    const result = matchDish(dish, ['potato'], { staplesOn: true });
+    expect(result.status).toBe('full');
+    // oil and salt are both staples
+    expect(result.have).toContain('oil');
+    expect(result.have).toContain('salt');
+  });
+
+  // --- haveCount and totalCount tests ---
+
+  it('returns haveCount and totalCount for a dish with staples', () => {
+    const dish = { ingredients: ['salt', 'oil', 'rice', 'dal'] };
+    const result = matchDish(dish, ['rice'], { staplesOn: true });
+    // have = [salt, oil, rice], missing = [dal]
+    // staplesSkipped = 2 (salt, oil)
+    expect(result.haveCount).toBe(3);
+    expect(result.totalCount).toBe(2); // 4 ingredients - 2 staples skipped
+  });
+
+  it('haveCount and totalCount with staplesOff', () => {
+    const dish = { ingredients: ['salt', 'rice', 'dal'] };
+    const result = matchDish(dish, ['rice', 'dal'], { staplesOn: false });
+    // no staples skipped
+    expect(result.haveCount).toBe(2);
+    expect(result.totalCount).toBe(3); // all 3 count
+  });
+
+  it('haveCount and totalCount: full match', () => {
+    const dish = { ingredients: ['salt', 'turmeric', 'rice', 'tomato'] };
+    const result = matchDish(dish, ['rice', 'tomato'], { staplesOn: true });
+    // salt + turmeric are staples (skipped=2), rice + tomato from pantry
+    expect(result.haveCount).toBe(4);
+    expect(result.totalCount).toBe(2); // 4 - 2 staples
+    expect(result.status).toBe('full');
+  });
+
+  it('empty dish has zero counts', () => {
+    const dish = { ingredients: [] };
+    const result = matchDish(dish, []);
+    expect(result.haveCount).toBe(0);
+    expect(result.totalCount).toBe(0);
+  });
+
+  it('undefined ingredients has zero counts', () => {
+    const dish = {};
+    const result = matchDish(dish, ['rice']);
+    expect(result.haveCount).toBe(0);
+    expect(result.totalCount).toBe(0);
+  });
+
+  it('all-staple dish has zero totalCount', () => {
+    const dish = { ingredients: ['salt', 'oil', 'turmeric'] };
+    const result = matchDish(dish, [], { staplesOn: true });
+    // all 3 are staples
+    expect(result.haveCount).toBe(3);
+    expect(result.totalCount).toBe(0); // 3 - 3
     expect(result.status).toBe('full');
     expect(result.score).toBe(1);
   });

@@ -1,54 +1,86 @@
-import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { localDateStr } from '../lib/dates.js';
 import { pickDish } from '../lib/randomizer.js';
+import { CUISINES } from '../lib/model.js';
 import { newItem } from '../lib/merge.js';
+import DietDot from '../components/DietDot.jsx';
+import Chip from '../components/Chip.jsx';
+import IconButton from '../components/IconButton.jsx';
+import Sheet from '../components/Sheet.jsx';
+import DishName from '../components/DishName.jsx';
+import Composer from '../components/Composer.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import { SearchIcon } from '../components/Icons.jsx';
+
+/* -- constants ------------------------------------------------ */
 
 const MEALS = ['breakfast', 'lunch', 'dinner'];
 const MEAL_LABELS = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner' };
-const MEAL_CLS = { breakfast: 'chip breakfast', lunch: 'chip lunch', dinner: 'chip dinner' };
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
-function DietDot({ diet }) {
-  if (!diet) return null;
-  if (diet === 'nonveg') {
-    return (
-      <span className="diet-dot nonveg" aria-label="Non-veg">
-        <svg viewBox="0 0 14 14" width="10" height="10">
-          <rect x="0.5" y="0.5" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1" />
-          <polygon points="7,3 11,11 3,11" fill="currentColor" />
-        </svg>
-      </span>
-    );
+const MEAL_OPTIONS = [
+  { value: 'breakfast', label: 'Breakfast' },
+  { value: 'lunch', label: 'Lunch' },
+  { value: 'dinner', label: 'Dinner' },
+];
+
+const MODE_OPTIONS = [
+  { value: 'home', label: 'Home cooked' },
+  { value: 'out', label: 'Ordered' },
+];
+
+/* -- helpers -------------------------------------------------- */
+
+function cuisineLabel(key) {
+  if (!key) return '';
+  for (const c of CUISINES) {
+    if (c.key === key) return c.label;
+    if (c.subs) {
+      for (const s of c.subs) {
+        if (s.key === key) return s.label;
+      }
+    }
   }
+  return key.replace(/(^|-)(\w)/g, (_, _sep, ch) => ' ' + ch.toUpperCase()).trim();
+}
+
+/* -- LogEntry sub-component ----------------------------------- */
+/* Logged meal row. Tap opens edit Sheet. Same component Track will reuse. */
+
+function LogEntry({ log, diet, onTap }) {
   return (
-    <span className={'diet-dot ' + (diet === 'egg' ? 'egg' : 'veg')} aria-label={diet === 'egg' ? 'Egg' : 'Veg'}>
-      <svg viewBox="0 0 14 14" width="10" height="10">
-        <rect x="0.5" y="0.5" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1" />
-        <circle cx="7" cy="7" r="3.5" fill="currentColor" />
-      </svg>
-    </span>
+    <button type="button" className="log-entry" onClick={onTap}>
+      <Chip type={log.mode === 'home' ? 'mode-home' : 'mode-out'} />
+      <DietDot diet={diet} size="sm" />
+      <span className="log-entry-name">{log.dish}</span>
+      {log.cost > 0 && (
+        <span className="log-entry-cost">{'₹'}{log.cost}</span>
+      )}
+      {log.notes && (
+        <span className="log-entry-note">{log.notes}</span>
+      )}
+    </button>
   );
 }
 
+/* -- Today ---------------------------------------------------- */
+
 export default function Today({
   items, dishes, plans, logs, groceryItems,
-  pantryItem, prefsItem, saveItem, deleteWithUndo,
+  pantryItem, prefsItem, saveItem, deleteWithUndo, showToast,
 }) {
-  const [expandedMeal, setExpandedMeal] = useState(null);
-  const [composer, setComposer] = useState({ dish: '', mode: 'home', cost: '', note: '' });
-  const [editingLogId, setEditingLogId] = useState(null);
-  const [editValues, setEditValues] = useState({});
-  const [toast, setToast] = useState(null);
-  const toastTimer = useRef(null);
+  /* -- state -------------------------------------------------- */
+  const [logSheet, setLogSheet] = useState(null);       // { meal, log? }
+  const [logValues, setLogValues] = useState({});
+  const [showCuisineAsk, setShowCuisineAsk] = useState(false);
+  const [showPicker, setShowPicker] = useState(null);   // { meal }
+  const [pickerSearch, setPickerSearch] = useState('');
 
-  useEffect(() => () => {
-    if (toastTimer.current) clearTimeout(toastTimer.current);
-  }, []);
-
+  /* -- derived data ------------------------------------------- */
   const today = localDateStr();
   const todayPlan = useMemo(() => plans.find(p => p.date === today), [plans, today]);
   const todayLogs = useMemo(() => logs.filter(l => l.date === today), [logs, today]);
@@ -63,21 +95,16 @@ export default function Today({
     return dishes.find(d => d.name === name)?.diet || null;
   }, [dishes]);
 
-  const showToast = useCallback((msg, undoFn) => {
-    if (toastTimer.current) clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(null), 5000);
-    setToast({ msg, undoFn });
-  }, []);
+  const dayCuisine = todayPlan?.cuisine || null;
+  const allFavCuisines = prefsItem?.cuisines || [];
+  const favCuisines = allFavCuisines.filter(k => !k.includes(':'));
 
-  const dismissToast = useCallback(() => {
-    if (toastTimer.current) clearTimeout(toastTimer.current);
-    setToast(null);
-  }, []);
+  /* -- plan actions ------------------------------------------- */
 
   const reroll = useCallback(async (meal) => {
     const name = pickDish(meal, today, {
       dishes, plans, logs,
-      cuisines: todayPlan?.cuisine ? [todayPlan.cuisine] : (prefsItem?.cuisines || null),
+      cuisines: dayCuisine ? [dayCuisine] : (prefsItem?.cuisines || null),
       diet: prefsItem?.diet || 'all',
     });
     if (!name) return;
@@ -87,30 +114,43 @@ export default function Today({
       [meal]: name,
     };
     await saveItem({ ...(todayPlan || {}), id, type: 'plan', date: today, meals });
-  }, [today, dishes, plans, logs, todayPlan, prefsItem, saveItem]);
+  }, [today, dishes, plans, logs, todayPlan, dayCuisine, prefsItem, saveItem]);
 
-  const clearSlot = useCallback(async (meal) => {
+  const pickFromCatalog = useCallback(async (meal, dishName) => {
+    setShowPicker(null);
+    setPickerSearch('');
     const id = 'plan-' + today;
     const meals = {
       ...(todayPlan?.meals || { breakfast: '', lunch: '', dinner: '' }),
-      [meal]: '',
+      [meal]: dishName,
     };
     await saveItem({ ...(todayPlan || {}), id, type: 'plan', date: today, meals });
   }, [today, todayPlan, saveItem]);
 
-  const clearDay = useCallback(async () => {
+  const clearSlot = useCallback(async (meal) => {
     const id = 'plan-' + today;
-    await saveItem({ ...(todayPlan || {}), id, type: 'plan', date: today, meals: { breakfast: '', lunch: '', dinner: '' } });
-    showToast('Day cleared');
+    const prevMeals = { ...(todayPlan?.meals || { breakfast: '', lunch: '', dinner: '' }) };
+    const newMeals = { ...prevMeals, [meal]: '' };
+    await saveItem({ ...(todayPlan || {}), id, type: 'plan', date: today, meals: newMeals });
+    if (showToast) {
+      showToast(`${MEAL_LABELS[meal]} cleared`, async () => {
+        await saveItem({ ...(todayPlan || {}), id, type: 'plan', date: today, meals: prevMeals });
+      });
+    }
   }, [today, todayPlan, saveItem, showToast]);
 
-  const fillDay = useCallback(async () => {
-    const meals = { breakfast: '', lunch: '', dinner: '' };
+  const fillDay = useCallback(async (cuisineKey) => {
+    setShowCuisineAsk(false);
+    const selectedCuisines = cuisineKey === 'mix'
+      ? (prefsItem?.cuisines || null)
+      : [cuisineKey];
+    const meals = { ...(todayPlan?.meals || { breakfast: '', lunch: '', dinner: '' }) };
     const exclude = [];
     for (const meal of MEALS) {
+      if (meals[meal]) continue;
       const name = pickDish(meal, today, {
         dishes, plans, logs, exclude,
-        cuisines: todayPlan?.cuisine ? [todayPlan.cuisine] : (prefsItem?.cuisines || null),
+        cuisines: selectedCuisines,
         diet: prefsItem?.diet || 'all',
       });
       if (name) {
@@ -119,8 +159,11 @@ export default function Today({
       }
     }
     const id = 'plan-' + today;
-    await saveItem({ ...(todayPlan || {}), id, type: 'plan', date: today, meals });
+    const cuisine = cuisineKey === 'mix' ? '' : cuisineKey;
+    await saveItem({ ...(todayPlan || {}), id, type: 'plan', date: today, meals, cuisine });
   }, [today, dishes, plans, logs, todayPlan, prefsItem, saveItem]);
+
+  /* -- log actions -------------------------------------------- */
 
   const cookedThis = useCallback(async (meal, dishName) => {
     const item = newItem({
@@ -128,47 +171,73 @@ export default function Today({
       mode: 'home', dish: dishName, cost: 0, notes: '',
     });
     await saveItem(item);
-    showToast('Logged!', async () => {
-      await saveItem({ ...item, deleted: true, deleted_at: Date.now() });
-    });
+    if (showToast) {
+      showToast('Logged!', async () => {
+        await saveItem({ ...item, deleted: true, deleted_at: Date.now() });
+      });
+    }
   }, [today, saveItem, showToast]);
 
-  const submitComposer = useCallback(async (meal) => {
-    const d = composer.dish.trim();
-    if (!d) return;
-    await saveItem(newItem({
-      type: 'log', date: today, meal,
-      mode: composer.mode,
-      dish: d,
-      cost: composer.mode === 'out' ? (Number(composer.cost) || 0) : 0,
-      notes: composer.note.trim(),
-    }));
-    setComposer({ dish: '', mode: 'home', cost: '', note: '' });
-    setExpandedMeal(null);
-    showToast('Meal logged!');
-  }, [composer, today, saveItem, showToast]);
-
-  const saveEdit = useCallback(async (original) => {
-    await saveItem({
-      ...original,
-      dish: editValues.dish ?? original.dish,
-      mode: editValues.mode ?? original.mode,
-      cost: (editValues.mode ?? original.mode) === 'out'
-        ? (Number(editValues.cost) || 0) : (original.cost || 0),
-      notes: editValues.notes ?? original.notes,
-    });
-    setEditingLogId(null);
-    setEditValues({});
-  }, [editValues, saveItem]);
-
-  const toggleComposer = useCallback((meal) => {
-    if (expandedMeal === meal) {
-      setExpandedMeal(null);
+  const openLogSheet = useCallback((meal, log) => {
+    if (log) {
+      setLogValues({
+        dish: log.dish,
+        meal: log.meal,
+        mode: log.mode,
+        cost: log.cost || '',
+        notes: log.notes || '',
+      });
+      setLogSheet({ meal, log });
     } else {
-      setExpandedMeal(meal);
-      setComposer({ dish: '', mode: 'home', cost: '', note: '' });
+      setLogValues({
+        dish: '',
+        meal,
+        mode: 'home',
+        cost: '',
+        notes: '',
+      });
+      setLogSheet({ meal });
     }
-  }, [expandedMeal]);
+  }, []);
+
+  const closeLogSheet = useCallback(() => {
+    setLogSheet(null);
+    setLogValues({});
+  }, []);
+
+  const saveLog = useCallback(async () => {
+    const d = (logValues.dish || '').trim();
+    if (!d) return;
+    const isEdit = !!logSheet?.log;
+    const item = isEdit
+      ? {
+          ...logSheet.log,
+          dish: d,
+          meal: logValues.meal || logSheet.meal,
+          mode: logValues.mode || 'home',
+          cost: logValues.mode === 'out' ? (Number(logValues.cost) || 0) : 0,
+          notes: (logValues.notes || '').trim(),
+        }
+      : newItem({
+          type: 'log', date: today,
+          meal: logValues.meal || logSheet.meal,
+          mode: logValues.mode || 'home',
+          dish: d,
+          cost: logValues.mode === 'out' ? (Number(logValues.cost) || 0) : 0,
+          notes: (logValues.notes || '').trim(),
+        });
+    await saveItem(item);
+    closeLogSheet();
+    if (showToast) showToast(isEdit ? 'Updated' : 'Meal logged');
+  }, [logValues, logSheet, today, saveItem, closeLogSheet, showToast]);
+
+  const deleteLog = useCallback(async () => {
+    if (!logSheet?.log) return;
+    deleteWithUndo(logSheet.log);
+    closeLogSheet();
+  }, [logSheet, deleteWithUndo, closeLogSheet]);
+
+  /* -- summary ------------------------------------------------ */
 
   const summary = useMemo(() => {
     if (todayLogs.length === 0) return null;
@@ -178,181 +247,232 @@ export default function Today({
     return { cooked, ordered, spent };
   }, [todayLogs]);
 
+  /* -- composer fields ---------------------------------------- */
+
+  const logFields = useMemo(() => {
+    const fields = [
+      { key: 'dish', label: 'Dish', type: 'text', placeholder: 'What did you have?' },
+      { key: 'meal', label: 'Meal', type: 'select', options: MEAL_OPTIONS },
+      { key: 'mode', label: 'Mode', type: 'select', options: MODE_OPTIONS },
+    ];
+    if (logValues.mode === 'out') {
+      fields.push({ key: 'cost', label: 'Cost', type: 'number', placeholder: 'Amount spent' });
+    }
+    fields.push({ key: 'notes', label: 'Notes', type: 'textarea', placeholder: 'Optional notes' });
+    return fields;
+  }, [logValues.mode]);
+
+  /* -- picker data -------------------------------------------- */
+
+  const pickerDishes = useMemo(() => {
+    if (!showPicker) return [];
+    const meal = showPicker.meal;
+    const search = pickerSearch.toLowerCase().trim();
+    return dishes
+      .filter(d => d.meal === meal || d.meal === 'any')
+      .filter(d => !search || d.name.toLowerCase().includes(search))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [showPicker, pickerSearch, dishes]);
+
+  /* -- render ------------------------------------------------- */
+
   return (
-    <main className="screen">
-      {/* Date heading */}
-      <span className="eyebrow">Today</span>
-      <div className="disp" style={{ fontSize: 24, fontWeight: 700, marginBottom: 16 }}>
-        {dateDisplay}
-      </div>
-
-      {/* Fill day + Clear day */}
-      <div style={{ marginBottom: 14, marginTop: 0 }}>
-        <button className="btn accent" style={{ width: '100%' }} onClick={fillDay}>
-          Fill day 🎲
-        </button>
-        <div style={{ textAlign: 'right', marginTop: 4 }}>
-          <button
-            onClick={clearDay}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--muted)', opacity: 0.7, padding: '2px 0' }}
-          >
-            Clear day
-          </button>
+    <div>
+      {/* Header row: date heading + Fill day */}
+      <div className="row today-header">
+        <div>
+          <span className="eyebrow">Today</span>
+          <div className="disp today-date">{dateDisplay}</div>
         </div>
+        <div className="spacer" />
+        <button
+          type="button"
+          className="btn small"
+          onClick={() => setShowCuisineAsk(true)}
+        >
+          Fill day
+        </button>
       </div>
 
-      {/* Meal cards */}
-      {MEALS.map(meal => {
-        const planned = todayPlan?.meals?.[meal] || '';
-        const mealLogs = todayLogs.filter(l => l.meal === meal);
-        const hasLog = mealLogs.length > 0;
-        const diet = getDiet(planned);
+      {/* Meal cards (hero) */}
+      <div className="list">
+        {MEALS.map(meal => {
+          const planned = todayPlan?.meals?.[meal] || '';
+          const mealLogs = todayLogs.filter(l => l.meal === meal);
+          const diet = getDiet(planned);
+          /* A5 fix: show "Cooked this" when THIS planned dish has no matching log */
+          const plannedDishLogged = planned && mealLogs.some(l => l.dish === planned);
 
-        return (
-          <div key={meal} className="card" style={{ marginBottom: 12 }}>
-            {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: planned && !hasLog ? 4 : 10 }}>
-              <span className={MEAL_CLS[meal]}>{MEAL_LABELS[meal]}</span>
-              {planned && <DietDot diet={diet} />}
-              <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 15, fontWeight: planned ? 600 : 400, color: planned ? 'var(--ink)' : 'var(--muted)' }}>
-                {planned || 'Nothing planned'}
-              </span>
-              {planned && (
-                <button className="btn-clear" onClick={() => clearSlot(meal)} title="Clear slot"
-                  style={{ padding: '2px 4px', fontSize: 13, flexShrink: 0, width: 28, textAlign: 'center' }}>
-                  ✕
-                </button>
-              )}
-              <button className="btn-clear"
-                onClick={() => reroll(meal)} title="Reroll"
-                style={{ padding: '2px 4px', fontSize: 14, flexShrink: 0, width: 28, textAlign: 'center' }}>
-                🎲
-              </button>
-            </div>
-            {/* Cooked link on its own row */}
-            {planned && !hasLog && (
-              <div style={{ marginBottom: 8, paddingLeft: 2 }}>
-                <button
-                  onClick={() => cookedThis(meal, planned)}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--success)', fontSize: 12, fontWeight: 600, padding: 0 }}>
-                  Cooked ✓
-                </button>
-              </div>
-            )}
-
-            {/* Logged entries */}
-            {mealLogs.map(log => (
-              <div key={log.id} style={{ marginBottom: 6 }}>
-                {editingLogId === log.id ? (
-                  <div className="card" style={{ padding: 10, background: 'var(--bg)' }}>
-                    <div className="form-stack">
-                      <input className="form-input"
-                        value={editValues.dish ?? ''} placeholder="Dish name"
-                        onChange={e => setEditValues(v => ({ ...v, dish: e.target.value }))} />
-                      <div className="seg">
-                        <button className={(editValues.mode ?? log.mode) === 'home' ? 'on' : ''}
-                          onClick={() => setEditValues(v => ({ ...v, mode: 'home' }))}>
-                          Home cooked
-                        </button>
-                        <button className={(editValues.mode ?? log.mode) === 'out' ? 'on' : ''}
-                          onClick={() => setEditValues(v => ({ ...v, mode: 'out' }))}>
-                          Ordered out
-                        </button>
-                      </div>
-                      {(editValues.mode ?? log.mode) === 'out' && (
-                        <input type="number" placeholder="Cost" className="form-input"
-                          value={editValues.cost ?? ''} onChange={e => setEditValues(v => ({ ...v, cost: e.target.value }))} />
-                      )}
-                      <input placeholder="Note (optional)" className="form-input"
-                        value={editValues.notes ?? ''} onChange={e => setEditValues(v => ({ ...v, notes: e.target.value }))} />
-                    </div>
-                    <div className="btn-row">
-                      <button className="btn" onClick={() => { setEditingLogId(null); setEditValues({}); }}>Cancel</button>
-                      <button className="btn accent" onClick={() => saveEdit(log)}>Save</button>
-                    </div>
-                  </div>
-                ) : (
-                  <div onClick={() => { setEditingLogId(log.id); setEditValues({ dish: log.dish, mode: log.mode, cost: log.cost || '', notes: log.notes || '' }); }}
-                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 'var(--radius)', background: 'var(--bg)', cursor: 'pointer' }}>
-                    <span className={'chip ' + (log.mode === 'home' ? 'plain' : 'grain')} style={{ fontSize: 11 }}>
-                      {log.mode === 'home' ? 'Home' : 'Order'}
-                    </span>
-                    <DietDot diet={getDiet(log.dish)} />
-                    <span style={{ flex: 1, fontSize: 14, fontWeight: 500 }}>{log.dish}</span>
-                    {log.cost > 0 && <span style={{ fontSize: 13, color: 'var(--muted)' }}>{log.cost}</span>}
-                    <button onClick={e => { e.stopPropagation(); deleteWithUndo(log); }}
-                      className="search-x" title="Delete">&#x2715;</button>
-                  </div>
+          return (
+            <div key={meal} className="card">
+              {/* 1. Chip row */}
+              <div className="chip-row">
+                <Chip type={`meal-${meal}`}>{MEAL_LABELS[meal]}</Chip>
+                {planned && <DietDot diet={diet} size="sm" />}
+                {dayCuisine && (
+                  <Chip type="cuisine">{cuisineLabel(dayCuisine)}</Chip>
                 )}
               </div>
-            ))}
 
-            {/* Log composer */}
-            {expandedMeal === meal ? (
-              <div style={{ marginTop: 8, padding: 12, borderRadius: 'var(--radius)', border: '1px dashed var(--line)', background: 'var(--bg)' }}>
-                <div className="form-stack">
-                  <input autoFocus placeholder="What did you have?" value={composer.dish}
-                    onChange={e => setComposer(c => ({ ...c, dish: e.target.value }))}
-                    className="form-input" />
-                  <div className="seg">
-                    <button className={composer.mode === 'home' ? 'on' : ''}
-                      onClick={() => setComposer(c => ({ ...c, mode: 'home' }))}>
-                      Home cooked
-                    </button>
-                    <button className={composer.mode === 'out' ? 'on' : ''}
-                      onClick={() => setComposer(c => ({ ...c, mode: 'out' }))}>
-                      Ordered out
-                    </button>
-                  </div>
-                  {composer.mode === 'out' && (
-                    <input type="number" placeholder="Amount spent" value={composer.cost}
-                      onChange={e => setComposer(c => ({ ...c, cost: e.target.value }))}
-                      className="form-input" />
-                  )}
-                  <input placeholder="Note (optional)" value={composer.note}
-                    onChange={e => setComposer(c => ({ ...c, note: e.target.value }))}
-                    className="form-input" />
-                </div>
-                <div className="btn-row">
-                  <button className="btn" onClick={() => setExpandedMeal(null)}>Cancel</button>
-                  <button className="btn accent" disabled={!composer.dish.trim()} onClick={() => submitComposer(meal)}>
-                    Log meal
+              {/* 2. Dish name on its own line (A13 fix: 2-line clamp) */}
+              {planned ? (
+                <DishName name={planned} fontSize={15} />
+              ) : (
+                <span className="dish-name-empty">Nothing planned</span>
+              )}
+
+              {/* 3. Action row */}
+              <div className="action-row">
+                {/* A5/B1 fix: real success-tinted button, not a tiny text link */}
+                {planned && !plannedDishLogged && (
+                  <button
+                    type="button"
+                    className="btn success small"
+                    onClick={() => cookedThis(meal, planned)}
+                  >
+                    Cooked this {'✓'}
                   </button>
-                </div>
+                )}
+                <div className="spacer" />
+                <IconButton
+                  icon="reroll"
+                  label="Reroll"
+                  onClick={() => reroll(meal)}
+                  size="sm"
+                  variant="ghost"
+                />
+                <IconButton
+                  icon="pick"
+                  label="Pick from catalog"
+                  onClick={() => { setShowPicker({ meal }); setPickerSearch(''); }}
+                  size="sm"
+                  variant="ghost"
+                />
+                <IconButton
+                  icon="clear"
+                  label="Clear slot"
+                  onClick={() => clearSlot(meal)}
+                  size="sm"
+                  variant="ghost"
+                />
               </div>
-            ) : (
-              <button className="add-task" onClick={() => toggleComposer(meal)}>
+
+              {/* 4. Logged entries */}
+              {mealLogs.map(log => (
+                <LogEntry
+                  key={log.id}
+                  log={log}
+                  diet={getDiet(log.dish)}
+                  onTap={() => openLogSheet(meal, log)}
+                />
+              ))}
+
+              {/* 5. "+ Log a meal" trigger */}
+              <button
+                type="button"
+                className="add-task"
+                onClick={() => openLogSheet(meal)}
+              >
                 <span className="plus">+</span> Log a meal
               </button>
-            )}
-          </div>
-        );
-      })}
+            </div>
+          );
+        })}
+      </div>
 
-      {/* Summary */}
+      {/* Summary strip (A14 fix: natural sentence) */}
       {summary && (
-        <div className="card" style={{ display: 'flex', justifyContent: 'center', gap: 16, fontSize: 13, color: 'var(--muted)', marginBottom: 20 }}>
-          <span>Home <strong style={{ color: 'var(--ink)' }}>{summary.cooked}</strong> cooked</span>
-          {summary.ordered > 0 && <span>Order <strong style={{ color: 'var(--ink)' }}>{summary.ordered}</strong> ordered</span>}
-          {summary.spent > 0 && <span>Spent <strong style={{ color: 'var(--ink)' }}>{summary.spent}</strong></span>}
-        </div>
-      )}
-
-      {/* Bottom spacer for tab bar */}
-      <div style={{ height: 20 }} />
-
-      {/* Toast */}
-      {toast && (
-        <div className="toast" style={{ position: 'fixed', bottom: 90, left: '50%', transform: 'translateX(-50%)', zIndex: 1000 }}>
-          <span>{toast.msg}</span>
-          {toast.undoFn && (
-            <button onClick={() => { toast.undoFn(); dismissToast(); }}
-              style={{ border: 'none', background: 'none', color: 'var(--gold)', cursor: 'pointer', fontWeight: 700, marginLeft: 12 }}>
-              Undo
-            </button>
+        <div className="summary today-summary">
+          <span><strong>{summary.cooked}</strong> cooked</span>
+          {summary.ordered > 0 && (
+            <span><strong>{summary.ordered}</strong> ordered</span>
+          )}
+          {summary.spent > 0 && (
+            <span>{'₹'}<strong>{summary.spent}</strong> spent</span>
           )}
         </div>
       )}
-    </main>
+
+      {/* Cuisine-ask Sheet (A12 fix: Fill day asks cuisine, like Plan) */}
+      {showCuisineAsk && (
+        <Sheet title="What are we cooking?" onClose={() => setShowCuisineAsk(false)}>
+          <div className="seg wrap">
+            <button type="button" className="on" autoFocus onClick={() => fillDay('mix')}>
+              Mix
+            </button>
+            {favCuisines.map(key => (
+              <button type="button" key={key} onClick={() => fillDay(key)}>
+                {cuisineLabel(key)}
+              </button>
+            ))}
+          </div>
+        </Sheet>
+      )}
+
+      {/* Dish picker Sheet */}
+      {showPicker && (
+        <Sheet
+          title={`Pick a dish — ${MEAL_LABELS[showPicker.meal]}`}
+          onClose={() => { setShowPicker(null); setPickerSearch(''); }}
+        >
+          <div className="search">
+            <SearchIcon size={17} />
+            <input
+              type="text"
+              placeholder="Search dishes"
+              value={pickerSearch}
+              onChange={e => setPickerSearch(e.target.value)}
+              autoFocus
+            />
+            {pickerSearch && (
+              <button
+                type="button"
+                className="search-x"
+                onClick={() => setPickerSearch('')}
+              >
+                {'✕'}
+              </button>
+            )}
+          </div>
+          <div className="list">
+            {pickerDishes.length === 0 && (
+              <EmptyState message="No dishes found" />
+            )}
+            {pickerDishes.map(d => (
+              <button
+                key={d.id}
+                type="button"
+                className="log-entry"
+                onClick={() => pickFromCatalog(showPicker.meal, d.name)}
+              >
+                <DietDot diet={d.diet} size="sm" />
+                <span className="log-entry-name">{d.name}</span>
+                {d.cuisine && (
+                  <Chip type="cuisine">{cuisineLabel(d.cuisine)}</Chip>
+                )}
+              </button>
+            ))}
+          </div>
+        </Sheet>
+      )}
+
+      {/* Log/edit Sheet with Composer (one editing model per 14.1.3) */}
+      {logSheet && (
+        <Sheet
+          title={logSheet.log ? 'Edit log' : 'Log a meal'}
+          onClose={closeLogSheet}
+        >
+          <Composer
+            fields={logFields}
+            values={logValues}
+            onChange={setLogValues}
+            onSave={saveLog}
+            onCancel={closeLogSheet}
+            onDelete={logSheet.log ? deleteLog : undefined}
+            saveLabel={logSheet.log ? 'Save' : 'Log meal'}
+          />
+        </Sheet>
+      )}
+    </div>
   );
 }

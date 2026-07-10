@@ -777,5 +777,28 @@ input, textarea, button { font-family: inherit; }
 .form-input select { appearance: none; }
 .composer-delete { color: var(--overdue) !important; }
 
+/* ---------- today tab ---------- */
+.today-header { margin-bottom: 14px; }
+.today-date { font-size: 17px; font-weight: 600; }
+.chip-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.action-row { display: flex; align-items: center; gap: 2px; margin-top: 8px; }
+.dish-name-empty { font-size: 15px; color: var(--muted); display: block; padding: 2px 0; }
+.btn.success {
+  background: color-mix(in srgb, var(--success) 16%, transparent);
+  color: var(--success); border-color: transparent;
+}
+.log-entry {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; text-align: left; cursor: pointer;
+  padding: 10px 12px; margin-top: 6px;
+  background: var(--bg); border: 1px solid var(--line);
+  border-radius: var(--radius); font-size: 14px; color: var(--ink);
+}
+.log-entry:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.log-entry-name { flex: 1; min-width: 0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.log-entry-cost { font-size: 13px; color: var(--muted); white-space: nowrap; }
+.log-entry-note { font-size: 12px; color: var(--muted); max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.today-summary { margin-top: 16px; }
+
 /* ---------- a11y ---------- */
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
