@@ -570,13 +570,25 @@ function LogRow({
             />
           </div>
           <div className="btn-row">
-            <div className="spacer" />
             <button
               className="btn ghost"
               style={{ color: 'var(--overdue)' }}
               onClick={() => deleteWithUndo(log)}
             >
               Delete
+            </button>
+            <div className="spacer" />
+            <button
+              className="btn ghost"
+              onClick={onTap}
+            >
+              Cancel
+            </button>
+            <button
+              className="btn accent"
+              onClick={onTap}
+            >
+              Save
             </button>
           </div>
         </div>

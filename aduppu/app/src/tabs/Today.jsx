@@ -187,13 +187,18 @@ export default function Today({
       </div>
 
       {/* Fill day + Clear day */}
-      <div className="btn-row" style={{ marginBottom: 14, marginTop: 0 }}>
-        <button className="btn accent" style={{ flex: 1 }} onClick={fillDay}>
-          Fill day
+      <div style={{ marginBottom: 14, marginTop: 0 }}>
+        <button className="btn accent" style={{ width: '100%' }} onClick={fillDay}>
+          Fill day 🎲
         </button>
-        <button className="btn-clear" onClick={clearDay}>
-          Clear day
-        </button>
+        <div style={{ textAlign: 'right', marginTop: 4 }}>
+          <button
+            onClick={clearDay}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--muted)', opacity: 0.7, padding: '2px 0' }}
+          >
+            Clear day
+          </button>
+        </div>
       </div>
 
       {/* Meal cards */}
@@ -206,28 +211,34 @@ export default function Today({
         return (
           <div key={meal} className="card" style={{ marginBottom: 12 }}>
             {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: planned && !hasLog ? 4 : 10 }}>
               <span className={MEAL_CLS[meal]}>{MEAL_LABELS[meal]}</span>
               {planned && <DietDot diet={diet} />}
-              <span style={{ flex: 1, fontSize: 15, fontWeight: planned ? 600 : 400, color: planned ? 'var(--ink)' : 'var(--muted)' }}>
+              <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 15, fontWeight: planned ? 600 : 400, color: planned ? 'var(--ink)' : 'var(--muted)' }}>
                 {planned || 'Nothing planned'}
               </span>
-              {planned && !hasLog && (
-                <button className="btn-clear" style={{ color: 'var(--success)', fontSize: 12 }}
-                  onClick={() => cookedThis(meal, planned)}>
-                  Cooked ✓
-                </button>
-              )}
               {planned && (
-                <button className="btn-clear" onClick={() => clearSlot(meal)} title="Clear slot">
+                <button className="btn-clear" onClick={() => clearSlot(meal)} title="Clear slot"
+                  style={{ padding: '2px 4px', fontSize: 13, flexShrink: 0, width: 28, textAlign: 'center' }}>
                   ✕
                 </button>
               )}
-              <button className="btn-clear" style={{ fontSize: 16 }}
-                onClick={() => reroll(meal)} title="Reroll">
+              <button className="btn-clear"
+                onClick={() => reroll(meal)} title="Reroll"
+                style={{ padding: '2px 4px', fontSize: 14, flexShrink: 0, width: 28, textAlign: 'center' }}>
                 🎲
               </button>
             </div>
+            {/* Cooked link on its own row */}
+            {planned && !hasLog && (
+              <div style={{ marginBottom: 8, paddingLeft: 2 }}>
+                <button
+                  onClick={() => cookedThis(meal, planned)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--success)', fontSize: 12, fontWeight: 600, padding: 0 }}>
+                  Cooked ✓
+                </button>
+              </div>
+            )}
 
             {/* Logged entries */}
             {mealLogs.map(log => (

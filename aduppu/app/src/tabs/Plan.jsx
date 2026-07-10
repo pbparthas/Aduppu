@@ -461,33 +461,37 @@ export default function Plan({
       })}
 
       {/* -- Fill + Clear buttons -- */}
-      <div className="btn-row" style={{ marginBottom: 24 }}>
-        <button
-          className="btn accent"
-          style={{ flex: 1 }}
-          onClick={() => setShowCuisineAsk({ mode: 'day', day: selectedDay })}
-        >
-          Fill day 🎲
-        </button>
-        <button
-          className="btn-clear"
-          onClick={() => clearDay(selectedDay)}
-        >
-          Clear day
-        </button>
-        <button
-          className="btn accent"
-          style={{ flex: 1 }}
-          onClick={() => setShowCuisineAsk({ mode: 'week' })}
-        >
-          Fill week 🎲
-        </button>
-        <button
-          className="btn-clear"
-          onClick={clearWeek}
-        >
-          Clear week
-        </button>
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            className="btn accent"
+            style={{ flex: 1, whiteSpace: 'nowrap' }}
+            onClick={() => setShowCuisineAsk({ mode: 'day', day: selectedDay })}
+          >
+            Fill day 🎲
+          </button>
+          <button
+            className="btn accent"
+            style={{ flex: 1, whiteSpace: 'nowrap' }}
+            onClick={() => setShowCuisineAsk({ mode: 'week' })}
+          >
+            Fill week 🎲
+          </button>
+        </div>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
+          <button
+            onClick={() => clearDay(selectedDay)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--muted)', opacity: 0.7, padding: '2px 0' }}
+          >
+            Clear day
+          </button>
+          <button
+            onClick={clearWeek}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--muted)', opacity: 0.7, padding: '2px 0' }}
+          >
+            Clear week
+          </button>
+        </div>
       </div>
 
       {/* -- Week overview -- */}

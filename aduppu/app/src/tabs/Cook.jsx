@@ -477,9 +477,29 @@ export default function Cook({
                 type="text"
                 placeholder="Add ingredient..."
                 value={pantryInput}
-                onChange={(e) => setPantryInput(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val.includes(',')) {
+                    const parts = val.split(',');
+                    const last = parts.pop();
+                    for (const p of parts) {
+                      const trimmed = p.trim();
+                      if (trimmed) handlePantryAdd(trimmed);
+                    }
+                    setPantryInput(last.trimStart());
+                  } else {
+                    setPantryInput(val);
+                  }
+                }}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') { handlePantryAdd(pantryInput); setPantryInput(''); }
+                  if (e.key === 'Enter') {
+                    const parts = pantryInput.split(',');
+                    for (const p of parts) {
+                      const trimmed = p.trim();
+                      if (trimmed) handlePantryAdd(trimmed);
+                    }
+                    setPantryInput('');
+                  }
                 }}
               />
             </div>
