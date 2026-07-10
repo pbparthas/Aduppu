@@ -185,18 +185,20 @@ input, textarea, button { font-family: inherit; }
   border: 1px dashed var(--line);
 }
 
-/* ---------- FSSAI diet dots ---------- */
+/* ---------- FSSAI diet dots (bordered-square variant) ---------- */
 .diet-dot {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 16px; height: 16px; flex: none; vertical-align: middle;
+  flex: none; vertical-align: middle;
 }
-.diet-dot svg { width: 100%; height: 100%; }
-/* green filled circle — vegetarian */
-.diet-dot.veg { color: #1a8c2d; }
-/* yellow filled circle — egg */
-.diet-dot.egg { color: #d4a012; }
-/* brown/red filled triangle — non-vegetarian */
-.diet-dot.nonveg { color: #8b2500; }
+.diet-dot svg { width: 100%; height: 100%; display: block; }
+/* sizes */
+.diet-dot.sm { width: 10px; height: 10px; }
+.diet-dot.md { width: 14px; height: 14px; }
+.diet-dot.lg { width: 18px; height: 18px; }
+/* FSSAI standard colors — not theme-variable */
+.diet-dot.veg { color: #228B22; }
+.diet-dot.egg { color: #DAA520; }
+.diet-dot.nonveg { color: #8B4513; }
 
 /* ---------- tasks / tick ---------- */
 .add-task {
@@ -323,6 +325,7 @@ input, textarea, button { font-family: inherit; }
   font-size: 13px; font-weight: 600; cursor: pointer;
   padding: 8px 13px; border-radius: 9px; color: var(--ink);
   background: transparent; border: 1px solid var(--line);
+  min-height: 44px;
 }
 .seg button.on { border-color: var(--accent); color: var(--accent); background: var(--accent-wash); }
 
@@ -660,12 +663,26 @@ input, textarea, button { font-family: inherit; }
 
 /* ---------- toast ---------- */
 .toast {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: calc(62px + env(safe-area-inset-bottom) + 8px);
+  z-index: 50;
+  max-width: calc(100vw - 32px);
   background: var(--ink); color: var(--bg);
   padding: 12px 20px; border-radius: 12px;
   font-size: 14px; font-weight: 600;
   box-shadow: 0 8px 24px rgba(0,0,0,0.18);
   display: flex; align-items: center; gap: 8px;
   white-space: nowrap;
+  animation: toast-in .2s ease-out;
+}
+.toast-undo {
+  background: none; border: none; cursor: pointer;
+  color: var(--accent); font-weight: 700; font-size: 14px;
+  padding: 2px 6px; white-space: nowrap;
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(12px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
 /* ---------- form / clear helpers ---------- */
@@ -698,5 +715,67 @@ input, textarea, button { font-family: inherit; }
   border-color: var(--accent);
 }
 
+/* ---------- icon button ---------- */
+.icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 44px; min-height: 44px;
+  padding: 10px; border: none; cursor: pointer;
+  border-radius: 10px; line-height: 0;
+  background: transparent; color: var(--ink);
+  flex: none;
+}
+.icon-btn:disabled { opacity: 0.4; cursor: default; }
+.icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.icon-btn.ghost { background: transparent; color: var(--muted); }
+.icon-btn.ghost:hover:not(:disabled) { background: var(--accent-wash); color: var(--ink); }
+.icon-btn.accent { background: var(--accent-wash); color: var(--accent); }
+.icon-btn.accent:hover:not(:disabled) { background: var(--accent); color: var(--accent-ink); }
+.icon-btn.muted { background: color-mix(in srgb, var(--muted) 14%, transparent); color: var(--muted); }
+.icon-btn.muted:hover:not(:disabled) { background: color-mix(in srgb, var(--muted) 24%, transparent); color: var(--ink); }
+
+/* ---------- dish name (2-line clamp) ---------- */
+.dish-name {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.35;
+  font-weight: 600;
+  cursor: pointer;
+  word-break: break-word;
+}
+
+/* ---------- sheet ---------- */
+.sheet-overlay .panel {
+  animation: sheet-slide-up .25s ease-out;
+}
+@keyframes sheet-slide-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+.sheet-header {
+  display: flex; align-items: center; gap: 8px;
+  padding-bottom: 4px; border-bottom: 1px solid var(--line);
+}
+.sheet-title {
+  flex: 1; font-size: 17px; font-weight: 700; color: var(--ink);
+  margin: 0;
+}
+.sheet-body {
+  flex: 1; overflow-y: auto; min-height: 0;
+}
+
+/* ---------- composer form label ---------- */
+.form-label {
+  display: flex; flex-direction: column; gap: 4px;
+}
+.form-label-text {
+  font-size: 12px; font-weight: 600; color: var(--muted);
+  letter-spacing: 0.02em; text-transform: uppercase;
+}
+.form-input select { appearance: none; }
+.composer-delete { color: var(--overdue) !important; }
+
 /* ---------- a11y ---------- */
-@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
