@@ -1,14 +1,32 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { localDateStr, addDays, weekDates, dayLabel } from '../lib/dates.js';
 import { pickDish } from '../lib/randomizer.js';
-import { CUISINES, expandCuisines } from '../lib/model.js';
+import { CUISINES } from '../lib/model.js';
 import { newItem } from '../lib/merge.js';
+import DietDot from '../components/DietDot.jsx';
+import Chip from '../components/Chip.jsx';
+import IconButton from '../components/IconButton.jsx';
+import Sheet from '../components/Sheet.jsx';
+import DishName from '../components/DishName.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import { SearchIcon, NextIcon, PrevIcon } from '../components/Icons.jsx';
 
 /* -- constants ------------------------------------------------ */
 
 const MEALS = ['breakfast', 'lunch', 'dinner'];
 const MEAL_LABELS = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner' };
-const DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MEAL_INITIALS = { breakfast: 'B', lunch: 'L', dinner: 'D' };
+const DAY_ABBR = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+const DIET_OPTIONS = [
+  { value: 'veg', label: 'Veg' },
+  { value: 'egg', label: 'Egg' },
+  { value: 'nonveg', label: 'Non-veg' },
+];
 
 /* -- helpers -------------------------------------------------- */
 
@@ -19,6 +37,13 @@ function getDayAbbr(dateStr) {
 
 function getDayNum(dateStr) {
   return parseInt(dateStr.split('-')[2], 10);
+}
+
+function getMonthYear(days) {
+  const [y1, m1] = days[0].split('-').map(Number);
+  const [y2, m2] = days[6].split('-').map(Number);
+  if (m1 === m2) return `${MONTHS[m1 - 1]} ${y1}`;
+  return `${MONTHS[m1 - 1]} / ${MONTHS[m2 - 1]} ${y2}`;
 }
 
 function cuisineLabel(key) {
@@ -34,53 +59,33 @@ function cuisineLabel(key) {
   return key.replace(/(^|-)(\w)/g, (_, _sep, ch) => ' ' + ch.toUpperCase()).trim();
 }
 
-/* -- tiny sub-components -------------------------------------- */
-
-function DietDot({ diet }) {
-  if (!diet) return null;
-  if (diet === 'nonveg') {
-    return (
-      <span className="diet-dot nonveg">
-        <svg viewBox="0 0 10 10">
-          <polygon points="5,0.5 9.5,9.5 0.5,9.5" fill="currentColor" />
-        </svg>
-      </span>
-    );
-  }
-  return (
-    <span className={`diet-dot ${diet}`}>
-      <svg viewBox="0 0 10 10">
-        <circle cx="5" cy="5" r="4.5" fill="currentColor" />
-      </svg>
-    </span>
-  );
-}
-
-function MealChip({ meal }) {
-  return (
-    <span className={`chip ${meal}`}>
-      {MEAL_LABELS[meal]}
-    </span>
-  );
+function formatCuisineAskTitle(mode, day) {
+  if (mode === 'week') return 'Fill this week';
+  const [y, m, d] = day.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  const weekday = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][dt.getDay()];
+  return `Fill ${weekday} ${d} ${MONTHS[m - 1]}`;
 }
 
 /* -- main component ------------------------------------------- */
 
 export default function Plan({
   items, dishes, plans, logs, groceryItems,
-  pantryItem, prefsItem, saveItem, deleteWithUndo,
+  pantryItem, prefsItem, saveItem, deleteWithUndo, showToast,
 }) {
   const today = localDateStr();
 
   const [weekAnchor, setWeekAnchor] = useState(today);
   const [selectedDay, setSelectedDay] = useState(today);
-  const [editingSlot, setEditingSlot] = useState(null);   // { day, meal }
-  const [editValue, setEditValue] = useState('');
-  const [showCuisineAsk, setShowCuisineAsk] = useState(null); // { mode, day? }
-  const [showPicker, setShowPicker] = useState(null);      // { day, meal }
+  const [showCuisineAsk, setShowCuisineAsk] = useState(null);  // { mode, day? }
+  const [showPicker, setShowPicker] = useState(null);           // { day, meal }
   const [pickerSearch, setPickerSearch] = useState('');
+  const [showOverflow, setShowOverflow] = useState(false);
+  const [showNewDish, setShowNewDish] = useState(null);         // { name, meal }
+  const [newDishValues, setNewDishValues] = useState({});
 
-  // Current week's day strings [Mon..Sun]
+  /* -- derived data ------------------------------------------- */
+
   const days = useMemo(() => weekDates(weekAnchor), [weekAnchor]);
 
   const allFavCuisines = prefsItem?.cuisines || [];
@@ -93,8 +98,8 @@ export default function Plan({
     [plans],
   );
 
-  const hasLog = useCallback(
-    (day, meal) => logs.some(l => l.date === day && l.meal === meal),
+  const getLogsForMeal = useCallback(
+    (day, meal) => logs.filter(l => l.date === day && l.meal === meal),
     [logs],
   );
 
@@ -185,7 +190,6 @@ export default function Plan({
     if (mode === 'day') {
       await fillDay(day, cuisineKey);
     } else {
-      // Fill week: only today and future days, not past days
       const todayStr = localDateStr();
       for (const d of days) {
         if (d >= todayStr) await fillDay(d, cuisineKey);
@@ -193,56 +197,78 @@ export default function Plan({
     }
   }, [showCuisineAsk, days, fillDay]);
 
-  /* -- clear day / clear week --------------------------------- */
+  /* -- clear with undo (A8 fix) ------------------------------- */
+
+  const clearSlot = useCallback(async (day, meal) => {
+    const existing = getPlan(day);
+    const prevMeals = { ...(existing?.meals || { breakfast: '', lunch: '', dinner: '' }) };
+    const prevName = prevMeals[meal];
+    if (!prevName) return;
+
+    const newMeals = { ...prevMeals, [meal]: '' };
+    await savePlan(day, { meals: newMeals });
+
+    if (showToast) {
+      showToast(`${MEAL_LABELS[meal]} cleared`, async () => {
+        await savePlan(day, { meals: prevMeals });
+      });
+    }
+  }, [getPlan, savePlan, showToast]);
 
   const clearDay = useCallback(async (day) => {
+    const existing = getPlan(day);
+    const prevMeals = { ...(existing?.meals || { breakfast: '', lunch: '', dinner: '' }) };
+    const prevCuisine = existing?.cuisine || null;
+    const hasContent = MEALS.some(m => prevMeals[m]);
+    if (!hasContent && !prevCuisine) return;
+
     await savePlan(day, { meals: { breakfast: '', lunch: '', dinner: '' }, cuisine: null });
-  }, [savePlan]);
+    setShowOverflow(false);
+
+    if (showToast) {
+      showToast('Day cleared', async () => {
+        await savePlan(day, { meals: prevMeals, cuisine: prevCuisine });
+      });
+    }
+  }, [getPlan, savePlan, showToast]);
 
   const clearWeek = useCallback(async () => {
     const todayStr = localDateStr();
+    const snapshots = [];
     for (const d of days) {
       if (d >= todayStr) {
+        const existing = getPlan(d);
+        snapshots.push({
+          day: d,
+          meals: { ...(existing?.meals || { breakfast: '', lunch: '', dinner: '' }) },
+          cuisine: existing?.cuisine || null,
+        });
         await savePlan(d, { meals: { breakfast: '', lunch: '', dinner: '' }, cuisine: null });
       }
     }
-  }, [days, savePlan]);
+    setShowOverflow(false);
 
-  /* -- inline edit -------------------------------------------- */
+    if (showToast) {
+      showToast('Week cleared', async () => {
+        for (const snap of snapshots) {
+          await savePlan(snap.day, { meals: snap.meals, cuisine: snap.cuisine });
+        }
+      });
+    }
+  }, [days, getPlan, savePlan, showToast]);
 
-  const startEdit = useCallback((day, meal, currentName) => {
-    setEditingSlot({ day, meal });
-    setEditValue(currentName || '');
-  }, []);
+  /* -- remove cuisine from a day ------------------------------ */
 
-  const commitEdit = useCallback(async () => {
-    if (!editingSlot) return;
-    await setSlot(editingSlot.day, editingSlot.meal, editValue.trim());
-    setEditingSlot(null);
-    setEditValue('');
-  }, [editingSlot, editValue, setSlot]);
+  const removeCuisine = useCallback(async (day) => {
+    await savePlan(day, { cuisine: null });
+  }, [savePlan]);
 
-  const cancelEdit = useCallback(() => {
-    setEditingSlot(null);
-    setEditValue('');
-  }, []);
-
-  // Autocomplete suggestions for the inline edit field
-  const suggestions = useMemo(() => {
-    if (!editingSlot || !editValue.trim()) return [];
-    const q = editValue.toLowerCase();
-    return dishes
-      .filter(d => d.meal === editingSlot.meal && !d.deleted
-        && d.name.toLowerCase().includes(q))
-      .slice(0, 6);
-  }, [editValue, editingSlot, dishes]);
-
-  /* -- dish picker bottom sheet ------------------------------- */
+  /* -- dish picker --------------------------------------------- */
 
   const pickerDishes = useMemo(() => {
     if (!showPicker) return [];
     const { meal } = showPicker;
-    let list = dishes.filter(d => d.meal === meal);
+    let list = dishes.filter(d => d.meal === meal && !d.deleted);
 
     if (pickerSearch.trim()) {
       const q = pickerSearch.toLowerCase();
@@ -256,11 +282,59 @@ export default function Plan({
     return list;
   }, [showPicker, dishes, pickerSearch]);
 
-  /* -- remove cuisine from a day ------------------------------ */
+  const pickerHasExactMatch = useMemo(() => {
+    if (!pickerSearch.trim()) return true;
+    const q = pickerSearch.toLowerCase().trim();
+    return pickerDishes.some(d => d.name.toLowerCase() === q);
+  }, [pickerSearch, pickerDishes]);
 
-  const removeCuisine = useCallback(async (day) => {
-    await savePlan(day, { cuisine: null });
-  }, [savePlan]);
+  const pickFromCatalog = useCallback(async (meal, dishName) => {
+    const day = showPicker?.day || selectedDay;
+    await setSlot(day, meal, dishName);
+    setShowPicker(null);
+    setPickerSearch('');
+  }, [showPicker, selectedDay, setSlot]);
+
+  /* -- new dish from picker ----------------------------------- */
+
+  const openNewDishSheet = useCallback(() => {
+    if (!showPicker) return;
+    const name = pickerSearch.trim();
+    const meal = showPicker.meal;
+    setShowNewDish({ name, meal });
+    setNewDishValues({ name, meal, cuisine: '', diet: 'veg' });
+  }, [showPicker, pickerSearch]);
+
+  const saveNewDish = useCallback(async () => {
+    const name = (newDishValues.name || '').trim();
+    if (!name) return;
+    const item = newItem({
+      type: 'dish',
+      name,
+      meal: newDishValues.meal || showNewDish.meal,
+      cuisine: newDishValues.cuisine || '',
+      diet: newDishValues.diet || 'veg',
+      ingredients: [],
+      tags: [],
+    });
+    await saveItem(item);
+    const day = showPicker?.day || selectedDay;
+    await setSlot(day, showNewDish.meal, name);
+    setShowNewDish(null);
+    setNewDishValues({});
+    setShowPicker(null);
+    setPickerSearch('');
+  }, [newDishValues, showNewDish, showPicker, selectedDay, saveItem, setSlot]);
+
+  /* -- cuisine pick items ------------------------------------- */
+
+  const cuisineItems = useMemo(() => {
+    const result = [{ key: 'mix', label: 'Mix' }];
+    for (const k of favCuisines) {
+      result.push({ key: k, label: cuisineLabel(k) });
+    }
+    return result;
+  }, [favCuisines]);
 
   /* -- selected day's plan ------------------------------------ */
 
@@ -271,371 +345,379 @@ export default function Plan({
   return (
     <div>
 
-      {/* -- Week navigation -- */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 16 }}>
-        <button className="btn ghost" onClick={() => changeWeek(-1)}>
-          &#x2039;
-        </button>
-
-        <div className="seg" style={{ flex: 1, justifyContent: 'center' }}>
-          {days.map(day => {
-            const isToday = day === today;
-            const isSelected = day === selectedDay;
-            const isPast = day < today;
-            return (
-              <button
-                key={day}
-                className={isSelected ? 'on' : ''}
-                onClick={() => setSelectedDay(day)}
-                style={{
-                  flex: 1,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  opacity: isPast && !isSelected ? 0.5 : 1,
-                }}
-              >
-                <span style={{ fontSize: '0.65rem', textTransform: 'uppercase' }}>
-                  {getDayAbbr(day)}
-                </span>
-                <span style={{ fontWeight: isToday ? 800 : 500 }}>
-                  {getDayNum(day)}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        <button className="btn ghost" onClick={() => changeWeek(1)}>
-          &#x203A;
-        </button>
+      {/* -- Week navigation row (above pills) -- */}
+      <div className="plan-nav">
+        <IconButton
+          icon="prev"
+          label="Previous week"
+          onClick={() => changeWeek(-1)}
+          size="sm"
+          variant="ghost"
+        />
+        <span className="plan-month">{getMonthYear(days)}</span>
+        <IconButton
+          icon="next"
+          label="Next week"
+          onClick={() => changeWeek(1)}
+          size="sm"
+          variant="ghost"
+        />
       </div>
 
-      {/* -- Selected day header -- */}
-      <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span className="disp" style={{ fontSize: '1.1rem', fontWeight: 600 }}>
-          {dayLabel(selectedDay)}
-        </span>
-        {selPlan?.cuisine && (
-          <span
-            className="chip cuisine"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
-          >
-            {cuisineLabel(selPlan.cuisine)}
-            <span
-              onClick={() => removeCuisine(selectedDay)}
-              style={{ cursor: 'pointer', marginLeft: 2, fontSize: '0.65rem' }}
-              role="button"
-              tabIndex={0}
-              title="Remove cuisine"
+      {/* -- Week strip: 7 equal pills (A3 fix) -- */}
+      <div className="plan-week">
+        {days.map(day => {
+          const isToday = day === today;
+          const isSelected = day === selectedDay;
+          const isPast = day < today;
+          return (
+            <button
+              key={day}
+              type="button"
+              className={
+                (isSelected ? 'on' : '') +
+                (isToday ? ' today' : '')
+              }
+              onClick={() => setSelectedDay(day)}
+              style={isPast && !isSelected ? { opacity: 0.5 } /* dynamic */ : undefined}
             >
-              &#x2715;
-            </span>
-          </span>
+              <span>{getDayAbbr(day)}</span>
+              <span className="plan-date">{getDayNum(day)}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* -- Selected day heading -- */}
+      <div className="plan-day-hdr">
+        <span className="disp plan-day-label">{dayLabel(selectedDay)}</span>
+        {selPlan?.cuisine && (
+          <Chip type="cuisine">
+            {cuisineLabel(selPlan.cuisine)}
+            <button
+              type="button"
+              className="plan-chip-remove"
+              onClick={() => removeCuisine(selectedDay)}
+              aria-label="Remove cuisine"
+            >
+              {'✕'}
+            </button>
+          </Chip>
         )}
       </div>
 
-      {/* -- Three meal boxes -- */}
-      {MEALS.map(meal => {
-        const planned = selPlan?.meals?.[meal] || '';
-        const isEditing = editingSlot?.day === selectedDay
-          && editingSlot?.meal === meal;
-        const logged = hasLog(selectedDay, meal);
-        const diet = getDiet(planned);
+      {/* -- Three meal cards -- */}
+      <div className="list">
+        {MEALS.map(meal => {
+          const planned = selPlan?.meals?.[meal] || '';
+          const diet = getDiet(planned);
+          const mealLogs = getLogsForMeal(selectedDay, meal);
+          const plannedDishLogged = planned && mealLogs.some(l => l.dish === planned);
 
-        return (
-          <div key={meal} className="card" style={{ marginBottom: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <MealChip meal={meal} />
-              {planned && !isEditing && <DietDot diet={diet} />}
-
-              {/* Dish name / inline edit */}
-              <div style={{ flex: 1, position: 'relative' }}>
-                {isEditing ? (
-                  <div>
-                    <input
-                      autoFocus
-                      value={editValue}
-                      onChange={e => setEditValue(e.target.value)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') commitEdit();
-                        if (e.key === 'Escape') cancelEdit();
-                      }}
-                      onBlur={() => setTimeout(commitEdit, 200)}
-                      className="form-input"
-                      style={{ padding: '4px 8px', fontSize: '0.875rem' }}
-                    />
-                    {suggestions.length > 0 && (
-                      <div style={{
-                        position: 'absolute', top: '100%', left: 0, right: 0,
-                        background: 'var(--card)',
-                        border: '1px solid var(--line)',
-                        borderRadius: 6, zIndex: 10, maxHeight: 200,
-                        overflowY: 'auto',
-                        boxShadow: 'var(--shadow)',
-                      }}>
-                        {suggestions.map(d => (
-                          <div
-                            key={d.id}
-                            onMouseDown={e => e.preventDefault()}
-                            onClick={() => {
-                              setEditValue(d.name);
-                              setSlot(selectedDay, meal, d.name);
-                              setEditingSlot(null);
-                            }}
-                            style={{
-                              padding: '6px 10px', cursor: 'pointer',
-                              fontSize: '0.85rem',
-                              display: 'flex', alignItems: 'center', gap: 4,
-                              borderBottom: '1px solid var(--line)',
-                            }}
-                          >
-                            <DietDot diet={d.diet} />
-                            {d.name}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <span
-                    onClick={() => startEdit(selectedDay, meal, planned)}
-                    style={{
-                      cursor: 'pointer', fontSize: '0.9rem',
-                      color: planned ? 'var(--ink)' : 'var(--muted)',
-                      fontWeight: planned ? 500 : 400,
-                    }}
-                  >
-                    {planned || 'Tap to plan'}
-                  </span>
+          return (
+            <div key={meal} className="card">
+              {/* 1. Chip row */}
+              <div className="chip-row">
+                <Chip type={`meal-${meal}`}>{MEAL_LABELS[meal]}</Chip>
+                {planned && <DietDot diet={diet} size="sm" />}
+                {selPlan?.cuisine && (
+                  <Chip type="cuisine">{cuisineLabel(selPlan.cuisine)}</Chip>
                 )}
               </div>
 
-              {/* "had this" indicator */}
-              {logged && (
-                <span style={{
-                  fontSize: '0.7rem', color: 'var(--success)',
-                  fontWeight: 600, whiteSpace: 'nowrap',
-                }}>
-                  &#x2713; had this
-                </span>
+              {/* 2. Dish name on its own line */}
+              {planned ? (
+                <DishName name={planned} fontSize={15} />
+              ) : (
+                <span className="dish-name-empty">Nothing planned</span>
               )}
 
-              {/* Clear slot */}
-              {planned && (
-                <button
-                  className="btn-clear"
-                  onClick={() => setSlot(selectedDay, meal, '')}
-                  title="Clear slot"
-                  style={{ padding: 4 }}
-                >
-                  &#x2715;
-                </button>
+              {/* 3. Log status (A4 fix) */}
+              {mealLogs.length > 0 && (
+                plannedDishLogged ? (
+                  <span className="plan-logged match">Had this</span>
+                ) : (
+                  <span className="plan-logged">
+                    logged: {mealLogs[0].dish}
+                  </span>
+                )
               )}
 
-              {/* Reroll */}
-              <button
-                className="btn ghost"
-                onClick={() => rerollSlot(selectedDay, meal)}
-                title="Reroll"
-                style={{ fontSize: '1rem', padding: 4 }}
-              >
-                🎲
-              </button>
-
-              {/* Pick from catalog */}
-              <button
-                className="btn ghost"
-                onClick={() => {
-                  setShowPicker({ day: selectedDay, meal });
-                  setPickerSearch('');
-                }}
-                title="Pick from catalog"
-                style={{ fontSize: '0.8rem', padding: 4 }}
-              >
-                📋
-              </button>
+              {/* 4. Action row */}
+              <div className="action-row">
+                <div className="spacer" />
+                <IconButton
+                  icon="reroll"
+                  label="Reroll"
+                  onClick={() => rerollSlot(selectedDay, meal)}
+                  size="sm"
+                  variant="ghost"
+                />
+                <IconButton
+                  icon="pick"
+                  label="Pick from catalog"
+                  onClick={() => {
+                    setShowPicker({ day: selectedDay, meal });
+                    setPickerSearch('');
+                  }}
+                  size="sm"
+                  variant="ghost"
+                />
+                <IconButton
+                  icon="clear"
+                  label="Clear slot"
+                  onClick={() => clearSlot(selectedDay, meal)}
+                  size="sm"
+                  variant="ghost"
+                />
+              </div>
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
 
       {/* -- Fill + Clear buttons -- */}
-      <div style={{ marginBottom: 24 }}>
-        <div style={{ display: 'flex', gap: 8 }}>
+      <div className="plan-fill-clear">
+        <div className="btn-row">
           <button
+            type="button"
             className="btn accent"
-            style={{ flex: 1, whiteSpace: 'nowrap' }}
             onClick={() => setShowCuisineAsk({ mode: 'day', day: selectedDay })}
           >
-            Fill day 🎲
+            Fill day
           </button>
           <button
+            type="button"
             className="btn accent"
-            style={{ flex: 1, whiteSpace: 'nowrap' }}
             onClick={() => setShowCuisineAsk({ mode: 'week' })}
           >
-            Fill week 🎲
+            Fill week
           </button>
+          <div className="spacer" />
+          <IconButton
+            icon="overflow"
+            label="More actions"
+            onClick={() => setShowOverflow(o => !o)}
+            size="sm"
+            variant="ghost"
+          />
         </div>
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
-          <button
-            onClick={() => clearDay(selectedDay)}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--muted)', opacity: 0.7, padding: '2px 0' }}
-          >
-            Clear day
-          </button>
-          <button
-            onClick={clearWeek}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--muted)', opacity: 0.7, padding: '2px 0' }}
-          >
-            Clear week
-          </button>
-        </div>
+
+        {/* Overflow menu for clear actions */}
+        {showOverflow && (
+          <div className="menu">
+            <button type="button" className="danger" onClick={() => clearDay(selectedDay)}>
+              Clear day
+            </button>
+            <button type="button" className="danger" onClick={() => clearWeek()}>
+              Clear week
+            </button>
+          </div>
+        )}
       </div>
 
       {/* -- Week overview -- */}
-      <span className="eyebrow" style={{ marginBottom: 8 }}>Week overview</span>
+      <div className="plan-overview">
+        <span className="eyebrow">Week overview</span>
 
-      <div className="card" style={{ padding: 0, overflow: 'hidden', marginBottom: 20 }}>
-        <div style={{ overflowX: 'auto' }}>
+        <div className="card">
           {days.map(day => {
             const plan = getPlan(day);
-            const isPast = day < today;
             const isToday = day === today;
+            const isPast = day < today;
             return (
-              <div
+              <button
                 key={day}
-                className={`week-row${isToday ? ' today' : ''}`}
+                type="button"
+                className={`plan-ov-row${isToday ? ' ov-today' : ''}`}
                 onClick={() => setSelectedDay(day)}
-                style={{
-                  padding: '8px 12px',
-                  cursor: 'pointer',
-                  opacity: isPast ? 0.5 : 1,
-                  ...(isToday ? { background: 'var(--accent-wash)' } : {}),
-                }}
+                style={isPast ? { opacity: 0.5 } /* dynamic */ : undefined}
               >
-                <span className="day-name" style={{ minWidth: 46, whiteSpace: 'nowrap' }}>
-                  {getDayAbbr(day)} {getDayNum(day)}
-                </span>
-
-                <div className="meals">
-                  {MEALS.map(meal => {
-                    const name = plan?.meals?.[meal] || '';
-                    return (
-                      <span key={meal} style={{
-                        flex: 1, fontSize: '0.7rem',
-                        color: name ? 'var(--ink)' : 'var(--muted)',
-                        overflow: 'hidden', textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap', padding: '2px 4px',
-                        borderRadius: 4,
-                      }}>
-                        {name || '—'}
-                      </span>
-                    );
-                  })}
+                <div className="plan-ov-content">
+                  <div className="plan-ov-line1">
+                    <span className="plan-ov-day">
+                      {getDayAbbr(day)} {getDayNum(day)}
+                    </span>
+                    {plan?.cuisine && (
+                      <Chip type="cuisine">{cuisineLabel(plan.cuisine)}</Chip>
+                    )}
+                  </div>
+                  <div className="plan-ov-meals">
+                    {MEALS.map(meal => {
+                      const name = plan?.meals?.[meal] || '';
+                      return (
+                        <span key={meal} className="plan-ov-meal">
+                          <span className="plan-ov-initial">{MEAL_INITIALS[meal]}</span>
+                          <span className={`plan-ov-name${name ? ' filled' : ''}`}>
+                            {name || '--'}
+                          </span>
+                        </span>
+                      );
+                    })}
+                  </div>
                 </div>
-
-                {plan?.cuisine && (
-                  <span className="chip cuisine">
-                    {cuisineLabel(plan.cuisine)}
-                  </span>
-                )}
-              </div>
+                <span className="plan-ov-chev">
+                  <NextIcon size={14} />
+                </span>
+              </button>
             );
           })}
         </div>
       </div>
 
-      {/* Bottom spacer for tab bar */}
-      <div style={{ height: 20 }} />
-
-      {/* -- Cuisine ask bottom sheet -- */}
+      {/* -- Cuisine-ask Sheet (B10 fixes) -- */}
       {showCuisineAsk && (
-        <div className="overlay" onClick={() => setShowCuisineAsk(null)}>
-          <div className="panel" onClick={e => e.stopPropagation()}>
-            <div style={{ fontSize: '1rem', fontWeight: 600 }}>
-              What are we cooking?
-            </div>
-            <div className="seg wrap">
+        <Sheet
+          title={formatCuisineAskTitle(showCuisineAsk.mode, showCuisineAsk.day)}
+          onClose={() => setShowCuisineAsk(null)}
+        >
+          <div className="seg wrap">
+            {cuisineItems.map(item => (
               <button
-                className="on"
-                autoFocus
-                onClick={() => handleCuisineChoice('mix')}
+                key={item.key}
+                type="button"
+                onClick={() => handleCuisineChoice(item.key)}
               >
-                Mix
+                {item.label}
               </button>
-              {favCuisines.map(key => (
-                <button
-                  key={key}
-                  onClick={() => handleCuisineChoice(key)}
-                >
-                  {cuisineLabel(key)}
-                </button>
-              ))}
-            </div>
+            ))}
           </div>
-        </div>
+          <div className="btn-row">
+            <button
+              type="button"
+              className="btn ghost"
+              onClick={() => setShowCuisineAsk(null)}
+            >
+              Cancel
+            </button>
+          </div>
+        </Sheet>
       )}
 
-      {/* -- Dish picker bottom sheet -- */}
+      {/* -- Catalog picker Sheet (A9 fix) -- */}
       {showPicker && (
-        <div className="overlay" onClick={() => setShowPicker(null)}>
-          <div
-            className="panel"
-            onClick={e => e.stopPropagation()}
-            style={{ maxHeight: '70vh' }}
-          >
-            <div style={{ fontSize: '1rem', fontWeight: 600 }}>
-              Pick a dish &mdash; {MEAL_LABELS[showPicker.meal]}
-            </div>
+        <Sheet
+          title={`Pick -- ${MEAL_LABELS[showPicker.meal]}`}
+          onClose={() => { setShowPicker(null); setPickerSearch(''); }}
+        >
+          <div className="search">
+            <SearchIcon size={17} />
+            <input
+              type="text"
+              placeholder="Search dishes"
+              value={pickerSearch}
+              onChange={e => setPickerSearch(e.target.value)}
+              autoFocus
+            />
+            {pickerSearch && (
+              <button
+                type="button"
+                className="search-x"
+                onClick={() => setPickerSearch('')}
+                aria-label="Clear search"
+              >
+                {'✕'}
+              </button>
+            )}
+          </div>
+          <div className="sheet-body">
+            {pickerDishes.length === 0 && !pickerSearch.trim() && (
+              <EmptyState message="No dishes found" />
+            )}
+            {pickerDishes.map(d => (
+              <button
+                key={d.id}
+                type="button"
+                className="plan-picker-row"
+                onClick={() => pickFromCatalog(showPicker.meal, d.name)}
+              >
+                <DietDot diet={d.diet} size="sm" />
+                <span className="plan-picker-name">{d.name}</span>
+                {d.cuisine && (
+                  <Chip type="cuisine">{cuisineLabel(d.cuisine)}</Chip>
+                )}
+              </button>
+            ))}
+            {pickerSearch.trim() && !pickerHasExactMatch && (
+              <button
+                type="button"
+                className="plan-use-text"
+                onClick={openNewDishSheet}
+              >
+                Use '{pickerSearch.trim()}'
+              </button>
+            )}
+          </div>
+        </Sheet>
+      )}
 
-            <div className="search">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                strokeWidth="2" strokeLinecap="round">
-                <circle cx="11" cy="11" r="8" />
-                <path d="m21 21-4.3-4.3" />
-              </svg>
+      {/* -- New dish Sheet (from picker "Use '<text>'") -- */}
+      {showNewDish && (
+        <Sheet
+          title="New dish"
+          onClose={() => { setShowNewDish(null); setNewDishValues({}); }}
+        >
+          <div className="form-stack">
+            <label className="form-label">
+              <span className="form-label-text">Name</span>
               <input
-                autoFocus
-                placeholder="Search dishes..."
-                value={pickerSearch}
-                onChange={e => setPickerSearch(e.target.value)}
+                type="text"
+                className="form-input"
+                value={newDishValues.name || ''}
+                onChange={e => setNewDishValues(v => ({ ...v, name: e.target.value }))}
               />
-            </div>
-
-            <div style={{ flex: 1, overflowY: 'auto' }}>
-              {pickerDishes.length === 0 ? (
-                <div className="empty">No dishes found</div>
-              ) : (
-                pickerDishes.map(d => (
-                  <div
-                    key={d.id}
-                    onClick={() => {
-                      setSlot(showPicker.day, showPicker.meal, d.name);
-                      setShowPicker(null);
-                    }}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 8,
-                      padding: '10px 8px', cursor: 'pointer',
-                      borderBottom: '1px solid var(--line)',
-                    }}
-                  >
-                    <DietDot diet={d.diet} />
-                    <span style={{ flex: 1, fontSize: '0.875rem' }}>
-                      {d.name}
-                    </span>
-                    {d.cuisine && (
-                      <span className="chip cuisine">
-                        {cuisineLabel(d.cuisine)}
-                      </span>
-                    )}
-                  </div>
-                ))
-              )}
+            </label>
+            <label className="form-label">
+              <span className="form-label-text">Meal</span>
+              <select
+                className="form-input"
+                value={newDishValues.meal || ''}
+                onChange={e => setNewDishValues(v => ({ ...v, meal: e.target.value }))}
+              >
+                {MEALS.map(m => (
+                  <option key={m} value={m}>{MEAL_LABELS[m]}</option>
+                ))}
+              </select>
+            </label>
+            <label className="form-label">
+              <span className="form-label-text">Cuisine</span>
+              <select
+                className="form-input"
+                value={newDishValues.cuisine || ''}
+                onChange={e => setNewDishValues(v => ({ ...v, cuisine: e.target.value }))}
+              >
+                <option value="">None</option>
+                {favCuisines.map(k => (
+                  <option key={k} value={k}>{cuisineLabel(k)}</option>
+                ))}
+              </select>
+            </label>
+            <label className="form-label">
+              <span className="form-label-text">Diet</span>
+              <select
+                className="form-input"
+                value={newDishValues.diet || 'veg'}
+                onChange={e => setNewDishValues(v => ({ ...v, diet: e.target.value }))}
+              >
+                {DIET_OPTIONS.map(o => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </label>
+            <div className="btn-row">
+              <button type="button" className="btn accent" onClick={saveNewDish}>
+                Add and assign
+              </button>
+              <button
+                type="button"
+                className="btn ghost"
+                onClick={() => { setShowNewDish(null); setNewDishValues({}); }}
+              >
+                Cancel
+              </button>
             </div>
           </div>
-        </div>
+        </Sheet>
       )}
     </div>
   );
