@@ -1,83 +1,139 @@
 import React, { useState, useMemo, useCallback, useRef } from 'react';
-import { localDateStr, dayLabel, addDays } from '../lib/dates.js';
-import { CUISINES, expandCuisines, DIET_ALLOWED, newItem } from '../lib/model.js';
-import { matchDish, STAPLES, normalize } from '../lib/kitchen.js';
-import { pickDish } from '../lib/randomizer.js';
+import { localDateStr, addDays, dayLabel } from '../lib/dates.js';
+import { newItem } from '../lib/merge.js';
+import SegRow from '../components/SegRow.jsx';
+import Chip from '../components/Chip.jsx';
+import Sheet from '../components/Sheet.jsx';
+import Composer from '../components/Composer.jsx';
+import EmptyState from '../components/EmptyState.jsx';
 
-// -- Currency formatter (en-IN) -------------------------------------------
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 function formatCurrency(amount) {
-  return `₹${(amount || 0).toLocaleString('en-IN')}`;
+  return '₹' + (amount || 0).toLocaleString('en-IN');
 }
-
-// -- Capitalize -----------------------------------------------------------
 
 function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
 
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const RANGE_ITEMS = [
+  { key: '7days',  label: 'Last 7 days' },
+  { key: '30days', label: 'Last 30 days' },
+  { key: 'all',    label: 'All' },
+];
+
+const MEAL_OPTIONS = [
+  { value: 'breakfast', label: 'Breakfast' },
+  { value: 'lunch',     label: 'Lunch' },
+  { value: 'dinner',    label: 'Dinner' },
+];
+
+const MODE_OPTIONS = [
+  { value: 'home', label: 'Home cooked' },
+  { value: 'out',  label: 'Ordered' },
+];
+
+const GROCERY_EDIT_FIELDS = [
+  { key: 'amount', label: 'Amount',  type: 'number', placeholder: 'Amount in rupees' },
+  { key: 'note',   label: 'Note',    type: 'text',   placeholder: 'What was it for?' },
+  { key: 'date',   label: 'Date',    type: 'date' },
+];
+
 // =========================================================================
-// Track component
+// Track
 // =========================================================================
 
 export default function Track({
   items, dishes, plans, logs, groceryItems,
-  pantryItem, prefsItem, saveItem, deleteWithUndo,
+  pantryItem, prefsItem, saveItem, deleteWithUndo, showToast,
 }) {
-  // -- State --------------------------------------------------------------
-  const [range, setRange]                   = useState('7days');
-  const [selMode, setSelMode]               = useState(false);
-  const [selIds, setSelIds]                 = useState(new Set());
-  const [addingGrocery, setAddingGrocery]   = useState(false);
-  const [groceryDate, setGroceryDate]       = useState(() => localDateStr());
-  const [groceryAmount, setGroceryAmount]   = useState('');
-  const [groceryNote, setGroceryNote]       = useState('');
-  const [editingLogId, setEditingLogId]     = useState(null);
-  const [editingGroceryId, setEditingGroceryId] = useState(null);
-  const [calendarMonth, setCalendarMonth]     = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; });
-  const [selectedLogDate, setSelectedLogDate] = useState(() => localDateStr());
+  // -- State ---------------------------------------------------------------
+
+  const [range, setRange]         = useState('7days');
+  const [selMode, setSelMode]     = useState(false);
+  const [selIds, setSelIds]       = useState(new Set());
+
+  // Grocery add
+  const [addingGrocery, setAddingGrocery]     = useState(false);
+  const [groceryAmount, setGroceryAmount]     = useState('');
+  const [groceryNote, setGroceryNote]         = useState('');
+  const [groceryDate, setGroceryDate]         = useState(() => localDateStr());
+  const [showGroceryDate, setShowGroceryDate] = useState(false);
+
+  // Edit sheets
+  const [editingLog, setEditingLog]               = useState(null);
+  const [editLogValues, setEditLogValues]         = useState({});
+  const [editingGrocery, setEditingGrocery]       = useState(null);
+  const [editGroceryValues, setEditGroceryValues] = useState({});
+
+  // Optional date filter for the log list
+  const [pickedDate, setPickedDate]       = useState(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   // Long-press timer for multi-select
   const longPressTimer = useRef(null);
 
-  // -- Date cutoff --------------------------------------------------------
+  // -- Date cutoff ---------------------------------------------------------
+
   const today = localDateStr();
+
   const cutoffDate = useMemo(() => {
     if (range === '7days')  return addDays(today, -6);
     if (range === '30days') return addDays(today, -29);
     return null;
   }, [range, today]);
 
-  // -- Filtered logs and grocery items ------------------------------------
-  const filteredLogs = useMemo(() => {
-    const active = logs.filter((l) => !l.deleted);
-    return cutoffDate ? active.filter((l) => l.date >= cutoffDate) : active;
+  // -- Filtered data -------------------------------------------------------
+
+  // Range-filtered logs (used for stats — not affected by picked date)
+  const rangeFilteredLogs = useMemo(() => {
+    const active = logs.filter(l => !l.deleted);
+    return cutoffDate ? active.filter(l => l.date >= cutoffDate) : active;
   }, [logs, cutoffDate]);
 
   const filteredGrocery = useMemo(() => {
-    const active = groceryItems.filter((g) => !g.deleted);
-    return cutoffDate ? active.filter((g) => g.date >= cutoffDate) : active;
+    const active = groceryItems.filter(g => !g.deleted);
+    return cutoffDate ? active.filter(g => g.date >= cutoffDate) : active;
   }, [groceryItems, cutoffDate]);
 
-  // -- Stats --------------------------------------------------------------
+  // Log list: range + optional picked-date filter
+  const filteredLogs = useMemo(() => {
+    if (pickedDate) return rangeFilteredLogs.filter(l => l.date === pickedDate);
+    return rangeFilteredLogs;
+  }, [rangeFilteredLogs, pickedDate]);
+
+  // -- Stats ---------------------------------------------------------------
+
   const stats = useMemo(() => {
-    const homeCooked  = filteredLogs.filter((l) => l.mode === 'home').length;
-    const ordered     = filteredLogs.filter((l) => l.mode === 'out').length;
-    const orderSpend  = filteredLogs.filter((l) => l.mode === 'out').reduce((s, l) => s + (l.cost || 0), 0);
+    const homeCooked  = rangeFilteredLogs.filter(l => l.mode === 'home').length;
+    const ordered     = rangeFilteredLogs.filter(l => l.mode === 'out').length;
+    const orderSpend  = rangeFilteredLogs
+      .filter(l => l.mode === 'out')
+      .reduce((s, l) => s + (l.cost || 0), 0);
     const grocerySpend = filteredGrocery.reduce((s, g) => s + (g.amount || 0), 0);
     return { homeCooked, ordered, orderSpend, grocerySpend };
-  }, [filteredLogs, filteredGrocery]);
+  }, [rangeFilteredLogs, filteredGrocery]);
 
-  // -- Summary text -------------------------------------------------------
-  const rangeLabel = range === '7days' ? 'this week' : range === '30days' ? 'this month' : 'in total';
+  // -- Summary text --------------------------------------------------------
+
+  const rangeLabel = range === '7days'  ? 'in the last 7 days'
+                   : range === '30days' ? 'in the last 30 days'
+                   : 'in total';
+
   const summaryText = useMemo(() => {
     const c = stats.homeCooked;
     const o = stats.ordered;
-    const parts = [];
-    parts.push(`You cooked ${c} meal${c !== 1 ? 's' : ''} and ordered ${o} ${rangeLabel}.`);
-    parts.push(`Orders ${formatCurrency(stats.orderSpend)}, groceries ${formatCurrency(stats.grocerySpend)}.`);
-    return parts.join(' ');
+    return `You cooked ${c} meal${c !== 1 ? 's' : ''} and ordered ${o} ${rangeLabel}. `
+      + `Orders ${formatCurrency(stats.orderSpend)}, groceries ${formatCurrency(stats.grocerySpend)}.`;
   }, [stats, rangeLabel]);
 
-  // -- Logs grouped by date (descending) ----------------------------------
+  // -- Logs grouped by date (descending) -----------------------------------
+
   const logsByDate = useMemo(() => {
     const groups = {};
     for (const log of filteredLogs) {
@@ -93,15 +149,45 @@ export default function Track({
     [logsByDate],
   );
 
-  // -- Grocery sorted by date descending ----------------------------------
+  // -- Grocery sorted by date descending -----------------------------------
+
   const sortedGrocery = useMemo(
-    () => [...filteredGrocery].sort((a, b) => (b.date || '').localeCompare(a.date || '')),
+    () => [...filteredGrocery].sort((a, b) =>
+      (b.date || '').localeCompare(a.date || '')),
     [filteredGrocery],
   );
 
-  // -- Handlers -----------------------------------------------------------
+  // -- Grocery add validation ----------------------------------------------
 
-  const handleAddGrocery = () => {
+  const isGroceryValid = useMemo(() => {
+    const amount = parseFloat(groceryAmount);
+    return !isNaN(amount) && amount > 0;
+  }, [groceryAmount]);
+
+  // -- Handlers: range -----------------------------------------------------
+
+  const handleRangeChange = useCallback((newRange) => {
+    setRange(newRange);
+    setPickedDate(null);
+    setShowDatePicker(false);
+  }, []);
+
+  // -- Handlers: grocery add -----------------------------------------------
+
+  const startGroceryAdd = useCallback(() => {
+    setAddingGrocery(true);
+    setGroceryDate(localDateStr());
+    setGroceryAmount('');
+    setGroceryNote('');
+    setShowGroceryDate(false);
+  }, []);
+
+  const cancelGroceryAdd = useCallback(() => {
+    setAddingGrocery(false);
+    setShowGroceryDate(false);
+  }, []);
+
+  const handleAddGrocery = useCallback(() => {
     const amount = parseFloat(groceryAmount);
     if (isNaN(amount) || amount <= 0) return;
     saveItem(newItem({
@@ -112,17 +198,84 @@ export default function Track({
     }));
     setGroceryAmount('');
     setGroceryNote('');
+    setGroceryDate(localDateStr());
+    setShowGroceryDate(false);
     setAddingGrocery(false);
-  };
+    if (showToast) showToast('Grocery entry added');
+  }, [groceryAmount, groceryDate, groceryNote, saveItem, showToast]);
 
-  const handleBulkDelete = () => {
-    for (const id of selIds) {
-      const item = logs.find((l) => l.id === id);
-      if (item) deleteWithUndo(item);
-    }
-    setSelIds(new Set());
-    setSelMode(false);
-  };
+  // -- Handlers: grocery edit (Sheet + Composer) ---------------------------
+
+  const openGroceryEdit = useCallback((grocery) => {
+    setEditingGrocery(grocery);
+    setEditGroceryValues({
+      amount: grocery.amount || 0,
+      note:   grocery.note || '',
+      date:   grocery.date || localDateStr(),
+    });
+  }, []);
+
+  const closeGroceryEdit = useCallback(() => {
+    setEditingGrocery(null);
+    setEditGroceryValues({});
+  }, []);
+
+  const saveGroceryEdit = useCallback(() => {
+    if (!editingGrocery) return;
+    saveItem({
+      ...editingGrocery,
+      amount: Number(editGroceryValues.amount) || 0,
+      note:   editGroceryValues.note,
+      date:   editGroceryValues.date,
+    });
+    closeGroceryEdit();
+  }, [editingGrocery, editGroceryValues, saveItem, closeGroceryEdit]);
+
+  const deleteGroceryItem = useCallback(() => {
+    if (!editingGrocery) return;
+    deleteWithUndo(editingGrocery);
+    closeGroceryEdit();
+  }, [editingGrocery, deleteWithUndo, closeGroceryEdit]);
+
+  // -- Handlers: log edit (Sheet + Composer) -------------------------------
+
+  const openLogEdit = useCallback((log) => {
+    if (selMode) return;
+    setEditingLog(log);
+    setEditLogValues({
+      dish:  log.dish || '',
+      meal:  log.meal || 'lunch',
+      mode:  log.mode || 'home',
+      cost:  log.cost || 0,
+      notes: log.notes || '',
+    });
+  }, [selMode]);
+
+  const closeLogEdit = useCallback(() => {
+    setEditingLog(null);
+    setEditLogValues({});
+  }, []);
+
+  const saveLogEdit = useCallback(() => {
+    if (!editingLog) return;
+    saveItem({
+      ...editingLog,
+      dish:  editLogValues.dish,
+      meal:  editLogValues.meal,
+      mode:  editLogValues.mode,
+      cost:  editLogValues.mode === 'out' ? (Number(editLogValues.cost) || 0) : 0,
+      notes: editLogValues.notes,
+    });
+    closeLogEdit();
+  }, [editingLog, editLogValues, saveItem, closeLogEdit]);
+
+  const deleteLogItem = useCallback(() => {
+    if (!editingLog) return;
+    deleteWithUndo(editingLog);
+    closeLogEdit();
+  }, [editingLog, deleteWithUndo, closeLogEdit]);
+
+  // -- Handlers: multi-select ---------------------------------------------
 
   const handleLongPress = useCallback((logId) => {
     setSelMode(true);
@@ -130,7 +283,7 @@ export default function Track({
   }, []);
 
   const toggleSelection = useCallback((logId) => {
-    setSelIds((prev) => {
+    setSelIds(prev => {
       const next = new Set(prev);
       if (next.has(logId)) {
         next.delete(logId);
@@ -141,6 +294,19 @@ export default function Track({
       return next;
     });
   }, []);
+
+  const cancelSelection = useCallback(() => {
+    setSelMode(false);
+    setSelIds(new Set());
+  }, []);
+
+  const handleBulkDelete = useCallback(() => {
+    for (const id of selIds) {
+      const item = logs.find(l => l.id === id);
+      if (item) deleteWithUndo(item);
+    }
+    cancelSelection();
+  }, [selIds, logs, deleteWithUndo, cancelSelection]);
 
   const handleTouchStart = useCallback((logId) => {
     longPressTimer.current = setTimeout(() => {
@@ -163,38 +329,53 @@ export default function Track({
     }
   }, []);
 
-  // -- Render -------------------------------------------------------------
+  // -- Log edit fields (dynamic: cost appears only when mode is Ordered) ---
+
+  const logEditFields = useMemo(() => {
+    const fields = [
+      { key: 'dish', label: 'Dish',  type: 'text',   placeholder: 'Dish name' },
+      { key: 'meal', label: 'Meal',  type: 'select', options: MEAL_OPTIONS },
+      { key: 'mode', label: 'Mode',  type: 'select', options: MODE_OPTIONS },
+    ];
+    if (editLogValues.mode === 'out') {
+      fields.push({ key: 'cost', label: 'Cost', type: 'number', placeholder: 'Amount' });
+    }
+    fields.push({ key: 'notes', label: 'Notes', type: 'textarea', placeholder: 'Add notes...' });
+    return fields;
+  }, [editLogValues.mode]);
+
+  // -- Render --------------------------------------------------------------
+
   return (
-    <div className="screen">
+    <div>
 
       {/* -- Range toggle -- */}
-      <div className="seg">
-        {[
-          { key: '7days',  label: '7 days' },
-          { key: '30days', label: 'This month' },
-          { key: 'all',    label: 'All' },
-        ].map(({ key, label }) => (
-          <button
-            key={key}
-            className={range === key ? 'on' : undefined}
-            onClick={() => setRange(key)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <SegRow items={RANGE_ITEMS} value={range} onChange={handleRangeChange} />
 
-      {/* -- Summary card -- */}
-      <div className="card" style={{ marginTop: 10 }}>
-        <p>{summaryText}</p>
-      </div>
+      {/* -- Summary + stat tiles -- */}
+      <div className="section">
+        <div className="card">
+          <p className="lead">{summaryText}</p>
+        </div>
 
-      {/* -- 2x2 stat tiles -- */}
-      <div className="stat-grid">
-        <StatTile label="Home Cooked" value={stats.homeCooked} />
-        <StatTile label="Ordered" value={stats.ordered} />
-        <StatTile label="Order Spend" value={formatCurrency(stats.orderSpend)} />
-        <StatTile label="Grocery Spend" value={formatCurrency(stats.grocerySpend)} />
+        <div className="stat-grid">
+          <div className="stat-tile">
+            <div className="stat-num">{stats.homeCooked}</div>
+            <div className="stat-label">Home Cooked</div>
+          </div>
+          <div className="stat-tile">
+            <div className="stat-num">{stats.ordered}</div>
+            <div className="stat-label">Ordered</div>
+          </div>
+          <div className="stat-tile">
+            <div className="stat-num">{formatCurrency(stats.orderSpend)}</div>
+            <div className="stat-label">Order Spend</div>
+          </div>
+          <div className="stat-tile">
+            <div className="stat-num">{formatCurrency(stats.grocerySpend)}</div>
+            <div className="stat-label">Grocery Spend</div>
+          </div>
+        </div>
       </div>
 
       {/* -- Grocery section -- */}
@@ -202,396 +383,218 @@ export default function Track({
         <span className="eyebrow">Groceries</span>
 
         {addingGrocery ? (
-          <div className="card" style={{ marginTop: 10 }}>
-            <div className="form-stack">
-              <input
-                type="date"
-                value={groceryDate}
-                onChange={(e) => setGroceryDate(e.target.value)}
-                className="form-input"
-              />
-              <input
-                type="number"
-                inputMode="decimal"
-                placeholder="Amount"
-                value={groceryAmount}
-                onChange={(e) => setGroceryAmount(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleAddGrocery(); }}
-                autoFocus
-                className="form-input"
-              />
-              <input
-                type="text"
-                placeholder="Note (optional)"
-                value={groceryNote}
-                onChange={(e) => setGroceryNote(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleAddGrocery(); }}
-                className="form-input"
-              />
-            </div>
-            <div className="btn-row">
-              <div className="spacer" />
-              <button className="btn" onClick={() => setAddingGrocery(false)}>Cancel</button>
-              <button className="btn accent" onClick={handleAddGrocery}>Add</button>
+          <div className="list">
+            <div className="card">
+              <div className="form-stack">
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  placeholder="Amount"
+                  value={groceryAmount}
+                  onChange={(e) => setGroceryAmount(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleAddGrocery(); }}
+                  autoFocus
+                  className="form-input"
+                />
+                <input
+                  type="text"
+                  placeholder="Note (optional)"
+                  value={groceryNote}
+                  onChange={(e) => setGroceryNote(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleAddGrocery(); }}
+                  className="form-input"
+                />
+                {showGroceryDate ? (
+                  <input
+                    type="date"
+                    value={groceryDate}
+                    onChange={(e) => setGroceryDate(e.target.value)}
+                    className="form-input"
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    className="btn ghost"
+                    onClick={() => setShowGroceryDate(true)}
+                  >
+                    Change date
+                  </button>
+                )}
+              </div>
+              <div className="btn-row">
+                <button type="button" className="btn ghost" onClick={cancelGroceryAdd}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn accent"
+                  onClick={handleAddGrocery}
+                  disabled={!isGroceryValid}
+                >
+                  Add
+                </button>
+              </div>
             </div>
           </div>
         ) : (
-          <button
-            className="add-task"
-            onClick={() => { setAddingGrocery(true); setGroceryDate(localDateStr()); }}
-          >
+          <button type="button" className="add-task" onClick={startGroceryAdd}>
             <span className="plus">+</span>
             Add grocery entry
           </button>
         )}
 
-        {/* Grocery entries list */}
-        <div className="list">
-          {sortedGrocery.map((g) => (
-            <GroceryRow
-              key={g.id}
-              grocery={g}
-              editing={editingGroceryId === g.id}
-              onEdit={() => setEditingGroceryId(editingGroceryId === g.id ? null : g.id)}
-              saveItem={saveItem}
-              deleteWithUndo={deleteWithUndo}
-            />
-          ))}
-        </div>
+        {sortedGrocery.length > 0 && (
+          <div className="list">
+            {sortedGrocery.map((g) => (
+              <div
+                key={g.id}
+                className="card"
+                role="button"
+                tabIndex={0}
+                onClick={() => openGroceryEdit(g)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') openGroceryEdit(g);
+                }}
+              >
+                <div className="task-row">
+                  <span className="lead">{dayLabel(g.date)}</span>
+                  <span className="task-main">{g.note || 'Groceries'}</span>
+                  <strong>{formatCurrency(g.amount)}</strong>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* -- Meal log (calendar view) -- */}
+      {/* -- Meal log section -- */}
       <div className="section">
         <span className="eyebrow">Meal Log</span>
 
-        {/* Month navigation */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, marginBottom: 8 }}>
-          <button className="btn ghost" onClick={() => {
-            const [y, m] = calendarMonth.split('-').map(Number);
-            const prev = m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
-            setCalendarMonth(prev);
-          }}>‹</button>
-          <span style={{ flex: 1, textAlign: 'center', fontWeight: 600, fontSize: 15 }}>
-            {(() => {
-              const [y, m] = calendarMonth.split('-').map(Number);
-              return new Date(y, m - 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
-            })()}
-          </span>
-          <button className="btn ghost" onClick={() => {
-            const [y, m] = calendarMonth.split('-').map(Number);
-            const next = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
-            setCalendarMonth(next);
-          }}>›</button>
-        </div>
-
-        {/* Calendar grid */}
-        <div className="card" style={{ padding: 8 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, textAlign: 'center' }}>
-            {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => (
-              <div key={i} style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', padding: '4px 0' }}>{d}</div>
-            ))}
-            {(() => {
-              const [y, m] = calendarMonth.split('-').map(Number);
-              const firstDay = new Date(y, m - 1, 1).getDay();
-              const daysInMonth = new Date(y, m, 0).getDate();
-              const offset = firstDay === 0 ? 6 : firstDay - 1;
-              const cells = [];
-              for (let i = 0; i < offset; i++) cells.push(<div key={'e' + i} />);
-              for (let d = 1; d <= daysInMonth; d++) {
-                const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-                const hasLogs = logs.some(l => l.date === dateStr && !l.deleted);
-                const isToday = dateStr === today;
-                const isSelected = dateStr === selectedLogDate;
-                cells.push(
-                  <button key={d} onClick={() => setSelectedLogDate(dateStr)} style={{
-                    border: 'none', cursor: 'pointer', padding: '6px 2px', borderRadius: 8, fontSize: 13,
-                    fontWeight: isToday ? 700 : 400, position: 'relative',
-                    background: isSelected ? 'var(--accent)' : isToday ? 'var(--accent-wash)' : 'transparent',
-                    color: isSelected ? 'var(--accent-ink)' : dateStr > today ? 'var(--muted)' : 'var(--ink)',
-                  }}>
-                    {d}
-                    {hasLogs && !isSelected && (
-                      <span style={{ position: 'absolute', bottom: 2, left: '50%', transform: 'translateX(-50%)', width: 4, height: 4, borderRadius: '50%', background: 'var(--accent)' }} />
-                    )}
-                  </button>
-                );
-              }
-              return cells;
-            })()}
+        {/* Pick a date (optional collapsed affordance) */}
+        {showDatePicker ? (
+          <div className="row">
+            <input
+              type="date"
+              className="form-input"
+              value={pickedDate || ''}
+              onChange={(e) => setPickedDate(e.target.value || null)}
+            />
+            <button
+              type="button"
+              className="btn ghost"
+              onClick={() => { setPickedDate(null); setShowDatePicker(false); }}
+            >
+              Show all
+            </button>
           </div>
-        </div>
+        ) : (
+          <button
+            type="button"
+            className="btn ghost"
+            onClick={() => setShowDatePicker(true)}
+          >
+            Pick a date
+          </button>
+        )}
 
-        {/* Selected day's logs */}
-        <div style={{ marginTop: 12 }}>
-          <span className="eyebrow">{dayLabel(selectedLogDate)}</span>
-          {(() => {
-            const dayLogs = logs.filter(l => l.date === selectedLogDate && !l.deleted);
-            if (dayLogs.length === 0) return <div className="empty" style={{ padding: '20px 0' }}>No meals logged.</div>;
-            return (
+        {/* Log groups by day */}
+        {sortedLogDates.length === 0 ? (
+          <EmptyState message="No meals logged." />
+        ) : (
+          sortedLogDates.map((date) => (
+            <div key={date} className="section">
+              <span className="eyebrow">{dayLabel(date)}</span>
               <div className="list">
-                {dayLogs.map((log) => (
-                  <LogRow
+                {logsByDate[date].map((log) => (
+                  <div
                     key={log.id}
-                    log={log}
-                    selMode={selMode}
-                    selected={selIds.has(log.id)}
-                    editing={editingLogId === log.id && !selMode}
-                    onTap={() => {
+                    className={`card${selIds.has(log.id) ? ' selected' : ''}`}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => {
                       if (selMode) toggleSelection(log.id);
-                      else setEditingLogId(editingLogId === log.id ? null : log.id);
+                      else openLogEdit(log);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        if (selMode) toggleSelection(log.id);
+                        else openLogEdit(log);
+                      }
                     }}
                     onTouchStart={() => handleTouchStart(log.id)}
                     onTouchEnd={handleTouchEnd}
                     onTouchMove={handleTouchMove}
-                    saveItem={saveItem}
-                    deleteWithUndo={deleteWithUndo}
-                  />
+                    onContextMenu={(e) => e.preventDefault()}
+                  >
+                    <div className="task-row">
+                      {selMode && (
+                        <span className={`tick${selIds.has(log.id) ? ' done' : ''}`}>
+                          {selIds.has(log.id) ? '✓' : ''}
+                        </span>
+                      )}
+                      <Chip type={`meal-${log.meal || 'lunch'}`}>
+                        {cap(log.meal || '')}
+                      </Chip>
+                      <Chip
+                        type={log.mode === 'out' ? 'mode-out' : 'mode-home'}
+                        className="plain"
+                      />
+                      <span className="task-main">{log.dish || ''}</span>
+                      {(log.cost || 0) > 0 && (
+                        <span className="lead">{formatCurrency(log.cost)}</span>
+                      )}
+                    </div>
+                    {log.notes && !selMode && (
+                      <p className="lead">{log.notes}</p>
+                    )}
+                  </div>
                 ))}
               </div>
-            );
-          })()}
-        </div>
+            </div>
+          ))
+        )}
       </div>
-
-      {/* Bottom spacer for tab bar */}
-      <div style={{ height: 20 }} />
 
       {/* -- Selection bar -- */}
       {selMode && (
         <div className="selbar">
-          <button
-            className="btn ghost"
-            onClick={() => { setSelMode(false); setSelIds(new Set()); }}
-          >
+          <button type="button" className="btn ghost" onClick={cancelSelection}>
             Cancel
           </button>
           <span className="selcount">{selIds.size} selected</span>
-          <button className="btn danger-fill" onClick={handleBulkDelete}>
+          <button type="button" className="btn danger-fill" onClick={handleBulkDelete}>
             Delete
           </button>
         </div>
       )}
-    </div>
-  );
-}
 
-// =========================================================================
-// StatTile
-// =========================================================================
-
-function StatTile({ label, value }) {
-  return (
-    <div className="stat-tile">
-      <div className="stat-num disp">{value}</div>
-      <div className="stat-label">{label}</div>
-    </div>
-  );
-}
-
-// =========================================================================
-// GroceryRow -- grocery entry with inline edit
-// =========================================================================
-
-function GroceryRow({ grocery, editing, onEdit, saveItem, deleteWithUndo }) {
-  return (
-    <div className="card" style={{ cursor: 'pointer' }} onClick={onEdit}>
-      {/* Summary row */}
-      <div className="task-row">
-        <span className="lead" style={{ minWidth: 60, flexShrink: 0 }}>
-          {dayLabel(grocery.date)}
-        </span>
-        <span className="task-main">
-          {grocery.note || 'Groceries'}
-        </span>
-        <strong>{formatCurrency(grocery.amount)}</strong>
-      </div>
-
-      {/* Inline edit */}
-      {editing && (
-        <div className="task-detail" onClick={(e) => e.stopPropagation()}>
-          <div className="form-stack">
-            <input
-              type="date"
-              key={`gd-${grocery.id}-${grocery.updated_at}`}
-              defaultValue={grocery.date}
-              onBlur={(e) => {
-                if (e.target.value && e.target.value !== grocery.date) {
-                  saveItem({ ...grocery, date: e.target.value });
-                }
-              }}
-              className="form-input"
-            />
-            <input
-              type="number"
-              inputMode="decimal"
-              key={`ga-${grocery.id}-${grocery.updated_at}`}
-              defaultValue={grocery.amount}
-              placeholder="Amount"
-              onBlur={(e) => {
-                const v = parseFloat(e.target.value);
-                if (!isNaN(v) && v !== grocery.amount) saveItem({ ...grocery, amount: v });
-              }}
-              className="form-input"
-            />
-            <input
-              type="text"
-              key={`gn-${grocery.id}-${grocery.updated_at}`}
-              defaultValue={grocery.note || ''}
-              onBlur={(e) => {
-                if (e.target.value !== (grocery.note || '')) saveItem({ ...grocery, note: e.target.value });
-              }}
-              placeholder="Note"
-              className="form-input"
-            />
-          </div>
-          <div className="btn-row">
-            <div className="spacer" />
-            <button
-              className="btn ghost"
-              style={{ color: 'var(--overdue)' }}
-              onClick={() => deleteWithUndo(grocery)}
-            >
-              Delete
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// =========================================================================
-// LogRow -- meal log entry with inline edit + multi-select
-// =========================================================================
-
-function LogRow({
-  log, selMode, selected, editing,
-  onTap, onTouchStart, onTouchEnd, onTouchMove,
-  saveItem, deleteWithUndo,
-}) {
-  const mealClass = log.meal || 'lunch';
-  const modeLabel = log.mode === 'home' ? 'Home' : 'Order';
-
-  return (
-    <div
-      className={`card${selected ? ' selected' : ''}`}
-      onClick={onTap}
-      onTouchStart={onTouchStart}
-      onTouchEnd={onTouchEnd}
-      onTouchMove={onTouchMove}
-      onContextMenu={(e) => e.preventDefault()}
-    >
-      {/* Summary row */}
-      <div className="task-row">
-        {selMode && (
-          <button className={`tick${selected ? ' done' : ''}`}>
-            {selected ? '✓' : ''}
-          </button>
-        )}
-        <span className={`chip ${mealClass}`}>
-          {cap(log.meal || '')}
-        </span>
-        <span className="chip plain">
-          {modeLabel}
-        </span>
-        <span className="task-main">
-          {log.dish || ''}
-        </span>
-        {(log.cost || 0) > 0 && (
-          <span className="lead" style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
-            {formatCurrency(log.cost)}
-          </span>
-        )}
-      </div>
-
-      {/* Notes preview */}
-      {log.notes && !editing && (
-        <p className="lead" style={selMode ? { paddingLeft: 34 } : undefined}>
-          {log.notes}
-        </p>
+      {/* -- Log edit Sheet -- */}
+      {editingLog && (
+        <Sheet title="Edit meal log" onClose={closeLogEdit}>
+          <Composer
+            fields={logEditFields}
+            values={editLogValues}
+            onChange={setEditLogValues}
+            onSave={saveLogEdit}
+            onCancel={closeLogEdit}
+            onDelete={deleteLogItem}
+          />
+        </Sheet>
       )}
 
-      {/* Inline edit (only when not in selection mode) */}
-      {editing && (
-        <div className="task-detail" onClick={(e) => e.stopPropagation()}>
-          <div className="form-stack">
-            <input
-              type="text"
-              key={`ld-${log.id}-${log.updated_at}`}
-              defaultValue={log.dish || ''}
-              onBlur={(e) => {
-                if (e.target.value !== (log.dish || '')) saveItem({ ...log, dish: e.target.value });
-              }}
-              placeholder="Dish name"
-              className="form-input"
-            />
-            <div className="row" style={{ gap: 8 }}>
-              <select
-                className="btn small"
-                key={`lm-${log.id}-${log.updated_at}`}
-                defaultValue={log.meal || 'lunch'}
-                onChange={(e) => saveItem({ ...log, meal: e.target.value })}
-              >
-                <option value="breakfast">Breakfast</option>
-                <option value="lunch">Lunch</option>
-                <option value="dinner">Dinner</option>
-              </select>
-              <select
-                className="btn small"
-                key={`lmd-${log.id}-${log.updated_at}`}
-                defaultValue={log.mode || 'home'}
-                onChange={(e) => saveItem({ ...log, mode: e.target.value })}
-              >
-                <option value="home">Home</option>
-                <option value="out">Ordered</option>
-              </select>
-            </div>
-            <input
-              type="number"
-              inputMode="decimal"
-              key={`lc-${log.id}-${log.updated_at}`}
-              defaultValue={log.cost || 0}
-              onBlur={(e) => {
-                const v = parseFloat(e.target.value) || 0;
-                if (v !== (log.cost || 0)) saveItem({ ...log, cost: v });
-              }}
-              placeholder="Cost"
-              className="form-input"
-            />
-            <input
-              type="text"
-              key={`ln-${log.id}-${log.updated_at}`}
-              defaultValue={log.notes || ''}
-              onBlur={(e) => {
-                if (e.target.value !== (log.notes || '')) saveItem({ ...log, notes: e.target.value });
-              }}
-              placeholder="Notes"
-              className="form-input"
-            />
-          </div>
-          <div className="btn-row">
-            <button
-              className="btn ghost"
-              style={{ color: 'var(--overdue)' }}
-              onClick={() => deleteWithUndo(log)}
-            >
-              Delete
-            </button>
-            <div className="spacer" />
-            <button
-              className="btn ghost"
-              onClick={onTap}
-            >
-              Cancel
-            </button>
-            <button
-              className="btn accent"
-              onClick={onTap}
-            >
-              Save
-            </button>
-          </div>
-        </div>
+      {/* -- Grocery edit Sheet -- */}
+      {editingGrocery && (
+        <Sheet title="Edit grocery entry" onClose={closeGroceryEdit}>
+          <Composer
+            fields={GROCERY_EDIT_FIELDS}
+            values={editGroceryValues}
+            onChange={setEditGroceryValues}
+            onSave={saveGroceryEdit}
+            onCancel={closeGroceryEdit}
+            onDelete={deleteGroceryItem}
+          />
+        </Sheet>
       )}
     </div>
   );
