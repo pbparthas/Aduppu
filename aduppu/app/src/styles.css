@@ -849,10 +849,14 @@ input, textarea, button { font-family: inherit; }
 /* week overview */
 .plan-overview { margin-top: 20px; }
 .plan-overview .eyebrow { margin-bottom: 8px; }
+.plan-overview .card { padding: 0; overflow: hidden; }
 .plan-ov-row {
   display: flex; align-items: center; gap: 8px;
-  padding: 10px 12px; cursor: pointer;
+  width: 100%; text-align: left;
+  background: none; border: none;
   border-bottom: 1px solid var(--line);
+  color: inherit; font: inherit;
+  padding: 10px 12px; cursor: pointer;
   font-size: 13px;
 }
 .plan-ov-row:last-child { border-bottom: none; }
