@@ -139,3 +139,51 @@ view-layer rebuild: shared primitives, one editing model, per-screen
 redlines, the seed QA pass, and an acceptance checklist that requires
 phone-viewport screenshots of every screen in both themes before the work is
 called done. Implementer: read this file for the *why*, §14 for the *what*.
+
+---
+
+# Round 2 — Review of the §14 rebuild (2026-07-11, branch head `5fc7691`)
+
+Method: same as round 1 — full walkthrough on the rebuilt app at **390×844
+and 360×780**, paper + dark, with automated regression checks against every
+round-1 finding, plus code inspection. 87/87 unit tests pass; zero console
+errors across the entire walkthrough.
+
+## Verified fixed (13 of 15 bugs, 9 of 11 UX issues)
+
+- **A1** Local mode shows a calm gray `local` pill everywhere. ✔
+- **A2** Double `.screen` nesting gone; layouts breathe correctly. ✔
+- **A3** All seven day pills + SUN fit at 390px AND 360px. ✔
+- **A4** Non-matching logs now show neutral "logged: <dish>" instead of the
+  false "✓ had this". ✔
+- **A5/B1** "Cooked this ✓" is a real success-tinted button on every planned
+  meal, and stays available regardless of other logs. ✔
+- **A6/B2** One editing model: everything edits in a bottom Sheet with real
+  Save/Cancel/Delete. Track's fake buttons are gone. ✔
+- **A7** Honest range labels ("Last 7 days / Last 30 days / All"), one mental
+  model — range governs stats and log; calendar demoted to "Pick a date". ✔
+- **A10** Kitchen matching works: the smoke pantry produces a non-empty "Can
+  cook now" with "have M of N" counts and "Need: …" on partials. ✔
+- **A12** Today's Fill day opens the cuisine-ask sheet, same as Plan. ✔
+- **A13/A14** Dish names clamp sanely; summary reads "2 cooked · …". ✔
+- **B3** Cook edits in a Sheet; **B4** "Log it" opens a pre-filled Sheet;
+  **B6** emoji replaced by stroke icons; **B9** grocery composer is
+  amount-first with date collapsed behind "Change date". ✔
+- Structural: zero inline styles in tabs, exactly one DietDot / Toast /
+  Sheet, shared components library present. ✔
+
+## Still open / new findings (small — normal punch-list, not systemic)
+
+| # | Finding | Detail |
+|---|---------|--------|
+| R2-1 | **A11 remains: sub-only selection shows a full region ✓.** Root cause found: the picker's toggle force-adds the parent region key to `prefs.cuisines` whenever a sub is selected (`App.jsx` toggle logic), which makes `regionOn` true — so the `partial` class is unreachable dead code. `expandCuisines()` already adds the parent for a `region:sub` key, so the UI add is redundant. Fix: stop adding the parent key on sub-select; render partial as a minus-square. |
+| R2-2 | **Notes field in the log Sheet has no input styling** — bare placeholder text floating under the NOTES label (every other field has a bordered box). |
+| R2-3 | **Toasts survive navigation** — "Grocery entry added" still showing after switching to Plan. Dismiss on tab change. |
+| R2-4 | Sheet + toast can overlap near the bottom action row; toast should sit above the Sheet's buttons or suppress while a Sheet is open. |
+| R2-5 | Meal/Mode in the log Sheet are native `<select>`s while the rest of the app uses seg-buttons — minor consistency nit (SegRow exists). |
+| R2-6 | Content: verify the idli/dosa family reaches "Can cook now" with plain "rice" pantry entries (alias `idli rice` ↔ `rice` decision), and continue the seed vocabulary audit (e.g. "black chickpea" vs "kadala" naming consistency — currently canonicalized to "black chickpea", acceptable but verify across all Kerala/TN seeds). |
+
+Verdict: the rebuild is real and the systemic problems (inline styles,
+duplicate components, fake affordances, unverifiable claims) are gone. The
+remaining items are a normal punch-list. R2-1 is the only user-visible
+correctness issue.

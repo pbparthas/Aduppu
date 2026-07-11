@@ -907,3 +907,91 @@ every seed ingredient is in it.
       present).
 - [ ] Local-only mode shows gray `local` pill on every screen.
 - [ ] Sunday reachable in the Plan week strip at 360px.
+
+## 15. v3.2 — Pantry & Groceries section + round-2 punch list (owner-directed, 2026-07-11)
+
+Owner requirement: *"grocery entry needs a proper section, separate — and a
+grocery/pantry tracker."* Groceries currently live as a small sub-section of
+Track, and the pantry is buried inside Cook's kitchen mode. Both are kitchen
+*inventory* concerns and get their own tab. Read `UIUX-REVIEW.md` "Round 2"
+for context; §15.0 items are bug fixes and come first.
+
+### 15.0 Round-2 punch list (fix before building the new tab)
+
+1. **R2-1 / A11**: in both cuisine pickers (onboarding + Settings), STOP
+   force-adding the parent region key when a sub is selected —
+   `expandCuisines()` already covers the parent for `region:sub` keys.
+   `prefs.cuisines` must store exactly what the user chose. Render the
+   parent's partial state as a **minus-square** (not ✓). Migration: on load,
+   if prefs contain a region key AND sub keys of the same region, drop the
+   region key only when not all subs are present (one-time cleanup, dirty=1).
+2. **R2-2**: Notes fields in Sheets get the same bordered input styling as
+   every other field.
+3. **R2-3/R2-4**: the Toast dismisses on tab navigation and never overlaps an
+   open Sheet's action row (suppress or lift above the Sheet).
+4. **R2-5**: Meal and Mode selectors in Sheets use SegRow, not native selects.
+5. **R2-6**: seed-vocabulary verification — with pantry exactly
+   `rice, urad dal, salt` and staples ON, Idli (or Dosa) must appear in
+   "Can cook now"; add this as a unit test over `SEEDS` + `matchDish`, and
+   settle the alias policy (`idli rice` aliases to `rice`) in `kitchen.js`.
+
+### 15.1 Navigation change
+
+Five tabs + gear: **TODAY · PLAN · COOK · PANTRY · TRACK** (Nisaba's tab bar
+handles five comfortably at 360px — verify). PANTRY icon: a stroke jar/basket
+in `Icons.jsx`, consistent with the existing set.
+
+### 15.2 PANTRY tab — two sections, one screen
+
+**Section 1 — "In the kitchen" (pantry inventory).**
+The pantry singleton's manager moves here from Cook:
+- Chip cloud of current items with ✕ remove (undoable via Toast), add
+  composer (comma/Enter separated, normalized + deduped exactly as today),
+  count in the eyebrow ("IN THE KITCHEN · 23 items"), and a clear-all in an
+  overflow menu (undoable).
+- A search/filter field appears when the pantry exceeds ~20 items.
+- **Cook keeps a read-write compact view** (same singleton item — chips +
+  add input stay in kitchen mode so the suggest flow keeps working in place);
+  the Pantry tab is the full manager. Same data, zero duplication of state.
+
+**Section 2 — "Groceries" (purchase tracker).**
+Grocery entry and history move here from Track (Track keeps only the spend
+stats):
+- Composer (amount-first, autofocus; note; date behind "Change date" —
+  unchanged from Track's fixed version) **plus one new optional field:
+  "Items bought"** — a chip input like the pantry's.
+- History list grouped by day buckets (same grouping as Track's log), each
+  row: date · note · items-bought preview · ₹ amount; tap → edit Sheet.
+- **The tracker loop**: when a grocery entry has items, a one-tap
+  **"Add to pantry"** action on the entry (and offered in the post-save
+  Toast) merges those items into the pantry singleton (normalized, deduped,
+  undoable as one batch). This is the grocery→pantry tracker: buy it, tap
+  once, and "From my kitchen" immediately knows.
+
+**Data model**: `grocery` items gain optional `items: string[]` (normalized
+lowercase). No other schema change; pantry stays the singleton. Sync
+unaffected (LWW per §4).
+
+### 15.3 Track tab adjustments
+
+- Remove the Groceries composer + list from Track.
+- Keep the four stat tiles and summary sentence; the "Grocery Spend" tile
+  becomes tappable and navigates to the PANTRY tab.
+- Meal log unchanged.
+
+### 15.4 Forward pointer
+
+The Phase-2 shopping list (§13.2) will live in the PANTRY tab (its natural
+home: list → buy → check off → pantry), with the entry point also kept on
+Plan's header per §13.2. Do not build it in this pass.
+
+### 15.5 Acceptance additions (on top of §14.6, all still required)
+
+- [ ] §15.0 punch list all fixed; A11 covered by a UI screenshot showing a
+      minus-square partial state; R2-6 covered by the new seed/matcher test.
+- [ ] Five-tab bar verified by screenshot at 390px AND 360px, both themes.
+- [ ] Walkthrough: add grocery entry with items "tomato, curry leaves" →
+      "Add to pantry" → both appear in pantry chips → kitchen results update
+      accordingly; undo restores the previous pantry.
+- [ ] Track shows no grocery composer; Grocery Spend tile navigates to
+      PANTRY.
