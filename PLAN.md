@@ -995,3 +995,16 @@ Plan's header per §13.2. Do not build it in this pass.
       accordingly; undo restores the previous pantry.
 - [ ] Track shows no grocery composer; Grocery Spend tile navigates to
       PANTRY.
+
+### 15.6 Recipe references (owner request, 2026-07-11)
+
+The seed catalog is generated dish data (name + ingredients + tags only — no
+methods, no sources); the owner's real recipes come from creators (e.g.
+Instagram cooks) and family. Make the existing `ref` field carry that:
+- When `dish.ref` is a URL, render it as a **tappable link** on the dish
+  card's expanded Sheet and as a small link chip on the card row (show the
+  hostname or @handle, e.g. "instagram.com/rekhascucina"; open in new tab).
+- Placeholder text for the field becomes: "Recipe source — link, book, or
+  person (e.g. an Instagram reel)".
+- Do NOT scrape or auto-import third-party recipe content. Manual entry with
+  attribution is the model.
