@@ -1005,6 +1005,15 @@ Instagram cooks) and family. Make the existing `ref` field carry that:
   card's expanded Sheet and as a small link chip on the card row (show the
   hostname or @handle, e.g. "instagram.com/rekhascucina"; open in new tab).
 - Placeholder text for the field becomes: "Recipe source — link, book, or
-  person (e.g. an Instagram reel)".
+  person (e.g. an Instagram reel or YouTube video)".
+- **Recent sources quick-pick**: the owner cooks repeatedly from a small set
+  of creators (e.g. Venkatesh Bhat and Chef Deena on YouTube, rekhascucina
+  and samayalwithsharon on Instagram). In the dish edit Sheet, below the
+  Reference field, show up to 5 chips of the most-frequently-used distinct
+  `ref` hosts/handles across the catalog ("instagram.com/rekhascucina",
+  "youtube.com/@..."); tapping one fills the field with that base URL for
+  the user to complete (or keeps the full URL when the source is a channel
+  rather than a specific video). Derived from existing dish data — no
+  hardcoded creator list in the app.
 - Do NOT scrape or auto-import third-party recipe content. Manual entry with
   attribution is the model.
