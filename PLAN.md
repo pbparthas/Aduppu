@@ -1017,3 +1017,68 @@ Instagram cooks) and family. Make the existing `ref` field carry that:
   hardcoded creator list in the app.
 - Do NOT scrape or auto-import third-party recipe content. Manual entry with
   attribution is the model.
+
+## 16. v3.3 — Make Cook a real cookbook (owner-directed, 2026-07-11)
+
+Owner's point: dish name + ingredients without a method is not a cookbook,
+and link-out-to-YouTube is not in-app value. The app must carry the cooking
+steps itself. Build after §15.
+
+### 16.1 Data model (additive — no breaking change)
+
+`dish` gains an optional `recipe` object; the existing normalized
+`ingredients` array is UNCHANGED (it powers matching):
+
+```js
+recipe: {
+  servings: 4,                    // number, optional
+  time_minutes: 40,               // number, optional
+  ingredients_full: [             // free-text lines WITH quantities
+    '1 cup toor dal', 'small lemon-size tamarind', ...
+  ],
+  steps: ['Pressure cook dal...', 'Roast and grind...', ...],  // ordered
+  draft: false,                   // true while AI-generated & unedited (16.4)
+}
+```
+
+### 16.2 Recipe card (read view first, form second)
+
+Tapping a dish in Cook opens a **recipe card Sheet** (read-only): name +
+diet dot + cuisine chip, time/servings row, quantities list, numbered steps,
+source link chip (§15.6) at the bottom, then Edit and Plan-it buttons. The
+§14 edit Sheet opens only from Edit. Dishes without a `recipe` show the
+catalog fields plus an inviting empty state: "No steps yet — write your
+method or draft one" (buttons for both).
+
+### 16.3 Cooking mode
+
+On Today, a planned dish with steps shows **"Start cooking →"**: a
+full-screen step checklist — large type, tappable to tick, ingredient
+quantities pinned in a collapsible header, screen wake-lock
+(`navigator.wakeLock`, best-effort), and "Cooked this ✓" offered on
+completion. No timers in this pass.
+
+### 16.4 "Draft the recipe" (extends the §13.1 Gemini endpoint)
+
+- Worker gains `POST /recipe` (same auth, same rate-limit bucket as
+  `/vision`): body `{ name, cuisine, diet, ingredients }` → Gemini free tier
+  with a JSON schema returning `{ servings, time_minutes, ingredients_full,
+  steps }`. Prompt: everyday Indian home method for the named dish in its
+  regional style, 5–10 concise steps, metric/Indian kitchen units.
+- App: "Draft the recipe" button on recipe-less dishes → fills `recipe`
+  with `draft: true`; the card shows a soft "AI draft — check and make it
+  yours" banner until the user edits (any edit clears `draft`).
+- Seeds stay method-less by design — recipe depth grows on demand, one
+  cooked dish at a time, owner-verified. Do NOT bulk-generate 350 methods.
+- No transcription/import of third-party videos; the user writes what they
+  learned, the ref chip credits the source.
+
+### 16.5 Acceptance additions
+
+- [ ] Recipe card renders for a dish with steps (screenshot, both themes).
+- [ ] Cooking mode: steps tick, wake-lock requested, completion offers
+      "Cooked this ✓" (screenshot).
+- [ ] Draft flow: without a Gemini key the button is hidden (Worker 501);
+      with it, a draft fills the fields, banner shows, edit clears `draft`.
+- [ ] Matching regression: adding a `recipe` to a dish changes nothing in
+      kitchen-mode results (normalized `ingredients` untouched).
