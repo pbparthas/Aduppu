@@ -104,6 +104,54 @@ function baseToUrl(base) {
   return /^https?:\/\//i.test(base) ? base : `https://${base}`;
 }
 
+/* ── Recipe draft helpers (§16.4) ────────────────────────────────────────── */
+
+// Worker base URL — same resolution as lib/auth.js (the /recipe endpoint lives
+// on the same Worker). localStorage override wins, else the deployed default.
+const AUTH_WORKER_DEFAULT = 'https://aduppu-auth.orionforge.dev';
+function workerBase() {
+  try { return localStorage.getItem('ad_auth_worker') || AUTH_WORKER_DEFAULT; }
+  catch { return AUTH_WORKER_DEFAULT; }
+}
+
+// Signed in? Mirrors auth.js's isSignedIn (the shared session flag).
+function isSignedIn() {
+  try { return localStorage.getItem('ad_signed_in') === '1'; } catch { return false; }
+}
+
+// Has the Worker told us /recipe isn't configured (501)? Then hide the button.
+function recipeDisabledInit() {
+  try { return localStorage.getItem('ad_recipe_disabled') === '1'; } catch { return false; }
+}
+
+// Split a textarea into trimmed, non-empty lines (one recipe line per row).
+function splitLines(s) {
+  return (s || '').split('\n').map((x) => x.trim()).filter(Boolean);
+}
+
+// "40 min · serves 4" — omits either half when absent.
+function recipeMetaLabel(recipe) {
+  const parts = [];
+  if (recipe?.time_minutes != null && recipe.time_minutes !== '') {
+    parts.push(`${recipe.time_minutes} min`);
+  }
+  if (recipe?.servings != null && recipe.servings !== '') {
+    parts.push(`serves ${recipe.servings}`);
+  }
+  return parts.join(' · ');
+}
+
+// Does the dish carry any real recipe content?
+function hasRecipeContent(recipe) {
+  if (!recipe) return false;
+  return (
+    (recipe.ingredients_full || []).length > 0
+    || (recipe.steps || []).length > 0
+    || (recipe.servings != null && recipe.servings !== '')
+    || (recipe.time_minutes != null && recipe.time_minutes !== '')
+  );
+}
+
 /* ═════════════════════════════════════════════════════════════════════════ */
 /* Cook                                                                     */
 /* ═════════════════════════════════════════════════════════════════════════ */
@@ -120,9 +168,19 @@ export default function Cook({
   const [cuisineFilter, setCuisineFilter] = useState(null);
   const [showAllDiet, setShowAllDiet] = useState(false);
 
+  // Recipe card sheet (read view — opens on tap; §16.2)
+  const [cardDishId, setCardDishId]   = useState(null);
+
   // Edit sheet
   const [editDishId, setEditDishId]   = useState(null);
   const [editValues, setEditValues]   = useState({});
+
+  // Draft-the-recipe flow (§16.4)
+  const [drafting, setDrafting]         = useState(false);
+  const [recipeDisabled, setRecipeDisabled] = useState(recipeDisabledInit);
+  const [online, setOnline]             = useState(
+    () => (typeof navigator === 'undefined' ? true : navigator.onLine),
+  );
 
   // Add composer
   const [addingDish, setAddingDish]   = useState(false);
@@ -151,6 +209,18 @@ export default function Cook({
   useEffect(() => {
     try { localStorage.setItem('ad:staples', String(staplesOn)); } catch { /* noop */ }
   }, [staplesOn]);
+
+  // Track connectivity so the "Draft the recipe" button hides when offline
+  useEffect(() => {
+    const on = () => setOnline(true);
+    const off = () => setOnline(false);
+    window.addEventListener('online', on);
+    window.addEventListener('offline', off);
+    return () => {
+      window.removeEventListener('online', on);
+      window.removeEventListener('offline', off);
+    };
+  }, []);
 
   /* ── Derived ───────────────────────────────────────────────────────────── */
 
@@ -306,6 +376,10 @@ export default function Cook({
     { key: 'cuisine', label: 'Cuisine', type: 'select', options: cuisineOptions },
     { key: 'diet', label: 'Diet', type: 'select', options: DIET_OPTIONS },
     { key: 'tags', label: 'Tags (comma-separated)', type: 'text', placeholder: 'spicy, one-pot, quick...' },
+    { key: 'servings', label: 'Servings', type: 'number', placeholder: '4' },
+    { key: 'time_minutes', label: 'Time (minutes)', type: 'number', placeholder: '40' },
+    { key: 'ingredients_full', label: 'Ingredients with quantities (one per line)', type: 'textarea', placeholder: '1 cup toor dal\nlemon-size tamarind...' },
+    { key: 'steps', label: 'Method (one step per line)', type: 'textarea', placeholder: 'Pressure cook dal...\nRoast and grind masala...' },
   ], [cuisineOptions]);
 
   // Log sheet field definitions
@@ -330,6 +404,10 @@ export default function Cook({
       cuisine: dish.cuisine || '',
       diet: dish.diet || 'veg',
       tags: (dish.tags || []).join(', '),
+      servings: dish.recipe?.servings != null ? String(dish.recipe.servings) : '',
+      time_minutes: dish.recipe?.time_minutes != null ? String(dish.recipe.time_minutes) : '',
+      ingredients_full: (dish.recipe?.ingredients_full || []).join('\n'),
+      steps: (dish.recipe?.steps || []).join('\n'),
     });
   }, []);
 
@@ -338,6 +416,60 @@ export default function Cook({
     setEditValues({});
   }, []);
 
+  const openCard = useCallback((dish) => setCardDishId(dish.id), []);
+  const closeCard = useCallback(() => setCardDishId(null), []);
+
+  // Edit from the recipe card: swap the read view for the §14 edit Sheet.
+  const editFromCard = useCallback((dish) => {
+    setCardDishId(null);
+    openEditSheet(dish);
+  }, [openEditSheet]);
+
+  // §16.4 — draft a recipe via the Worker /recipe endpoint.
+  const draftRecipe = useCallback(async (dish) => {
+    if (drafting) return;
+    setDrafting(true);
+    try {
+      const res = await fetch(workerBase() + '/recipe', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: dish.name,
+          cuisine: dish.cuisine,
+          diet: dish.diet,
+          ingredients: dish.ingredients || [],
+        }),
+      });
+      if (res.status === 501) {
+        // Not configured — hide the button from now on.
+        try { localStorage.setItem('ad_recipe_disabled', '1'); } catch { /* noop */ }
+        setRecipeDisabled(true);
+        return;
+      }
+      if (!res.ok) throw new Error('recipe ' + res.status);
+      const data = await res.json();
+      saveItem({
+        ...dish,
+        recipe: {
+          servings: data.servings,
+          time_minutes: data.time_minutes,
+          ingredients_full: data.ingredients_full || [],
+          steps: data.steps || [],
+          draft: true,
+        },
+      });
+      if (showToast) showToast('AI draft ready — check and make it yours');
+    } catch {
+      if (showToast) showToast('Couldn’t draft the recipe. Try again.');
+    } finally {
+      setDrafting(false);
+    }
+  }, [drafting, saveItem, showToast]);
+
+  // The draft button shows only when configured, online, and signed in.
+  const canDraft = !recipeDisabled && online && isSignedIn();
+
   const fillRef = useCallback((base) => {
     setEditValues((v) => ({ ...v, ref: baseToUrl(base) }));
   }, []);
@@ -345,6 +477,25 @@ export default function Cook({
   const saveEditDish = useCallback(() => {
     const dish = activeDishes.find((d) => d.id === editDishId);
     if (!dish) { closeEditSheet(); return; }
+
+    // Recipe fields (§16.1). Editing any of them makes the recipe "theirs":
+    // draft is always cleared on a manual save.
+    const ingredients_full = splitLines(editValues.ingredients_full);
+    const steps = splitLines(editValues.steps);
+    const servings = editValues.servings === '' || editValues.servings == null
+      ? undefined : Number(editValues.servings);
+    const time_minutes = editValues.time_minutes === '' || editValues.time_minutes == null
+      ? undefined : Number(editValues.time_minutes);
+    const nextRecipe = {
+      ...(dish.recipe || {}),
+      servings,
+      time_minutes,
+      ingredients_full,
+      steps,
+      draft: false,
+    };
+    const keepRecipe = hasRecipeContent(nextRecipe) || dish.recipe;
+
     saveItem({
       ...dish,
       name: editValues.name.trim() || dish.name,
@@ -357,6 +508,7 @@ export default function Cook({
       diet: editValues.diet || dish.diet,
       tags: editValues.tags
         .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean),
+      recipe: keepRecipe ? nextRecipe : undefined,
     });
     closeEditSheet();
     if (showToast) showToast('Dish saved');
@@ -630,7 +782,7 @@ export default function Cook({
                     <DishCard
                       key={dish.id}
                       dish={dish}
-                      onTap={() => openEditSheet(dish)}
+                      onTap={() => openCard(dish)}
                     />
                   ))}
                 </div>
@@ -796,6 +948,26 @@ export default function Cook({
       )}
 
       {/* ════════════════════════════════════════════════════════════════════ */}
+      {/* RECIPE CARD SHEET (read view first — §16.2)                        */}
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      {cardDishId && (() => {
+        const dish = activeDishes.find((d) => d.id === cardDishId);
+        if (!dish) return null;
+        return (
+          <Sheet title={dish.name} onClose={closeCard}>
+            <RecipeCard
+              dish={dish}
+              drafting={drafting}
+              canDraft={canDraft}
+              onEdit={() => editFromCard(dish)}
+              onPlan={() => { closeCard(); openPlanPicker(dish.name, dish.meal); }}
+              onDraft={() => draftRecipe(dish)}
+            />
+          </Sheet>
+        );
+      })()}
+
+      {/* ════════════════════════════════════════════════════════════════════ */}
       {/* EDIT DISH SHEET (B3 fix: Sheet + Composer, not in-place expansion) */}
       {/* ════════════════════════════════════════════════════════════════════ */}
       {editDishId && (
@@ -937,7 +1109,7 @@ function DishCard({ dish, onTap }) {
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onTap(); }
       }}
-      aria-label={`Edit ${dish.name}`}
+      aria-label={`View recipe for ${dish.name}`}
     >
       <div className="task-row">
         <DietDot diet={dish.diet || 'veg'} />
@@ -976,6 +1148,146 @@ function DishCard({ dish, onTap }) {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ═════════════════════════════════════════════════════════════════════════ */
+/* RecipeCard — read view for a dish (§16.2)                               */
+/* Recipe present: meta, quantities, numbered steps, source, Edit/Plan.    */
+/* Recipe absent: catalog fields + an inviting empty state (§16.4 draft).  */
+/* ═════════════════════════════════════════════════════════════════════════ */
+
+function RecipeCard({ dish, drafting, canDraft, onEdit, onPlan, onDraft }) {
+  const recipe = dish.recipe;
+  const has = hasRecipeContent(recipe);
+  const meta = recipeMetaLabel(recipe);
+  const fullIngredients = recipe?.ingredients_full || [];
+  const steps = recipe?.steps || [];
+
+  // Catalog preview (shown in the recipe-less empty state).
+  const preview = (dish.ingredients || []).slice(0, 6);
+  const moreCount = Math.max(0, (dish.ingredients || []).length - 6);
+
+  const sourceLink = isUrl(dish.ref) ? (
+    <a
+      className="ref-link"
+      href={refHref(dish.ref)}
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      <LinkIcon size={14} />
+      {formatRefLabel(dish.ref)}
+    </a>
+  ) : null;
+
+  return (
+    <div className="recipe-card">
+      {/* Header: name + diet dot + cuisine chip */}
+      <div className="recipe-head">
+        <DietDot diet={dish.diet || 'veg'} />
+        <span className="dish-name">{dish.name}</span>
+        {dish.cuisine && <Chip type="cuisine">{cuisineLabel(dish.cuisine)}</Chip>}
+      </div>
+
+      {/* Soft draft banner (§16.4) — shows while the recipe is an unedited draft */}
+      {recipe?.draft && (
+        <div className="draft-banner">AI draft — check and make it yours</div>
+      )}
+
+      {has ? (
+        <>
+          {meta && <div className="recipe-meta">{meta}</div>}
+
+          {fullIngredients.length > 0 && (
+            <div className="section">
+              <span className="eyebrow">Ingredients</span>
+              <ul className="recipe-ingredients">
+                {fullIngredients.map((line, i) => (
+                  <li key={`${line}-${i}`}>{line}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {steps.length > 0 && (
+            <div className="section">
+              <span className="eyebrow">Method</span>
+              <ol className="recipe-steps">
+                {steps.map((step, i) => (
+                  <li key={`${step}-${i}`} className="recipe-step">{step}</li>
+                ))}
+              </ol>
+            </div>
+          )}
+
+          {sourceLink && <div className="section">{sourceLink}</div>}
+
+          <div className="btn-row">
+            <button type="button" className="btn accent" onClick={onEdit}>
+              Edit
+            </button>
+            <button type="button" className="btn" onClick={onPlan}>
+              Plan it
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          {/* Catalog fields for a recipe-less dish */}
+          {preview.length > 0 && (
+            <div className="section">
+              <span className="eyebrow">Ingredients</span>
+              <p className="lead">
+                {preview.join(', ')}
+                {moreCount > 0 ? `, +${moreCount} more` : ''}
+              </p>
+            </div>
+          )}
+
+          {(dish.tags || []).length > 0 && (
+            <div className="task-sub">
+              {dish.tags.map((tag) => (
+                <Chip key={tag} type="plain">#{tag}</Chip>
+              ))}
+            </div>
+          )}
+
+          {sourceLink && <div className="section">{sourceLink}</div>}
+
+          {/* Inviting empty state (§16.2 / §16.4) */}
+          <div className="recipe-empty">
+            <p className="lead">No steps yet — write your method or draft one.</p>
+            <div className="btn-row">
+              <button type="button" className="btn" onClick={onEdit}>
+                Write method
+              </button>
+              {canDraft && (
+                <button
+                  type="button"
+                  className="btn accent"
+                  onClick={onDraft}
+                  disabled={drafting}
+                >
+                  {drafting ? (
+                    <span className="draft-loading">
+                      <span className="spinner" aria-hidden="true" />
+                      Drafting…
+                    </span>
+                  ) : 'Draft the recipe'}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Plan it stays available even without a method */}
+          <div className="btn-row">
+            <button type="button" className="btn ghost" onClick={onPlan}>
+              Plan it
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

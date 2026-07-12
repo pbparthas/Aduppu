@@ -10,6 +10,7 @@ import Sheet from '../components/Sheet.jsx';
 import DishName from '../components/DishName.jsx';
 import Composer from '../components/Composer.jsx';
 import EmptyState from '../components/EmptyState.jsx';
+import CookingMode from '../components/CookingMode.jsx';
 import { SearchIcon } from '../components/Icons.jsx';
 
 /* -- constants ------------------------------------------------ */
@@ -79,6 +80,7 @@ export default function Today({
   const [showCuisineAsk, setShowCuisineAsk] = useState(false);
   const [showPicker, setShowPicker] = useState(null);   // { meal }
   const [pickerSearch, setPickerSearch] = useState('');
+  const [cookingMeal, setCookingMeal] = useState(null); // { meal, dishName, recipe }
 
   /* -- derived data ------------------------------------------- */
   const today = localDateStr();
@@ -93,6 +95,11 @@ export default function Today({
   const getDiet = useCallback((name) => {
     if (!name) return null;
     return dishes.find(d => d.name === name)?.diet || null;
+  }, [dishes]);
+
+  const getRecipe = useCallback((name) => {
+    if (!name) return null;
+    return dishes.find(d => d.name === name)?.recipe || null;
   }, [dishes]);
 
   const dayCuisine = todayPlan?.cuisine || null;
@@ -300,6 +307,8 @@ export default function Today({
           const planned = todayPlan?.meals?.[meal] || '';
           const mealLogs = todayLogs.filter(l => l.meal === meal);
           const diet = getDiet(planned);
+          const recipe = getRecipe(planned);
+          const hasSteps = recipe?.steps?.length > 0;
           /* A5 fix: show "Cooked this" when THIS planned dish has no matching log */
           const plannedDishLogged = planned && mealLogs.some(l => l.dish === planned);
 
@@ -323,6 +332,16 @@ export default function Today({
 
               {/* 3. Action row */}
               <div className="action-row">
+                {/* §16.3: planned dish with a step-by-step recipe */}
+                {planned && hasSteps && (
+                  <button
+                    type="button"
+                    className="cook-start"
+                    onClick={() => setCookingMeal({ meal, dishName: planned, recipe })}
+                  >
+                    Start cooking {'→'}
+                  </button>
+                )}
                 {/* A5/B1 fix: real success-tinted button, not a tiny text link */}
                 {planned && !plannedDishLogged && (
                   <button
@@ -472,6 +491,19 @@ export default function Today({
             saveLabel={logSheet.log ? 'Save' : 'Log meal'}
           />
         </Sheet>
+      )}
+
+      {/* Cooking mode (§16.3): full-screen step checklist */}
+      {cookingMeal && (
+        <CookingMode
+          dishName={cookingMeal.dishName}
+          recipe={cookingMeal.recipe}
+          onClose={() => setCookingMeal(null)}
+          onCooked={async () => {
+            await cookedThis(cookingMeal.meal, cookingMeal.dishName);
+            setCookingMeal(null);
+          }}
+        />
       )}
     </div>
   );
