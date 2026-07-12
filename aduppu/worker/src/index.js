@@ -11,11 +11,19 @@
 //   /exchange  { code }        -> sets ad_session cookie, returns access token
 //   /refresh                   -> returns a fresh access token (uses cookie)
 //   /revoke                    -> revokes the refresh token, clears the session
+//   /recipe    { name, ... }   -> AI-drafts an everyday Indian home recipe (Gemini)
 
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const REVOKE_URL = 'https://oauth2.googleapis.com/revoke';
 const COOKIE = 'ad_session';
 const SESSION_TTL = 60 * 60 * 24 * 180; // 180 days
+
+// Recipe drafting (§16.4) — same Gemini free-tier pattern as /vision (§13.1).
+// The model call lives in one function so switching providers is a one-function
+// edit plus a secret swap; keep the Worker zero-dependency (plain fetch).
+const GEMINI_URL =
+  'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+const RECIPE_DAILY_LIMIT = 30; // matches the free-tier daily quota guard
 
 const form = (obj) => new URLSearchParams(obj);
 
@@ -65,6 +73,43 @@ async function googleToken(env, params) {
     body: form({ client_id: env.GOOGLE_CLIENT_ID, client_secret: env.GOOGLE_CLIENT_SECRET, ...params }),
   });
   return { ok: r.ok, data: await r.json() };
+}
+
+// Draft an everyday Indian home recipe for a named dish. Guaranteed-parseable
+// JSON via a response schema (same trick as callVisionModel). Throws
+// Error('recipe <status>') on an upstream failure so the caller can map the
+// Gemini status (esp. 429 quota) onto an app-facing status.
+async function callRecipeModel(env, { name, cuisine, diet, ingredients }) {
+  const PROMPT = `Write the everyday home-cooking recipe for "${name}", a ${diet} dish from ${cuisine} regional Indian cuisine. Known ingredients: ${ingredients.join(', ')}. Give realistic quantities for a typical family (servings), total time in minutes, a full ingredient list WITH quantities in metric/Indian kitchen units (cups, tsp, tbsp, grams), and 5-10 concise numbered steps in the authentic regional home style. Keep it practical for a home cook.`;
+  const r = await fetch(GEMINI_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: PROMPT }] }],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: 'OBJECT',
+          properties: {
+            servings: { type: 'INTEGER' },
+            time_minutes: { type: 'INTEGER' },
+            ingredients_full: { type: 'ARRAY', items: { type: 'STRING' } },
+            steps: { type: 'ARRAY', items: { type: 'STRING' } },
+          },
+          required: ['ingredients_full', 'steps'],
+        },
+      },
+    }),
+  });
+  if (!r.ok) throw new Error('recipe ' + r.status);
+  const data = await r.json();
+  const out = JSON.parse(data.candidates[0].content.parts[0].text);
+  return {
+    servings: out.servings,
+    time_minutes: out.time_minutes,
+    ingredients_full: out.ingredients_full,
+    steps: out.steps,
+  };
 }
 
 export default {
@@ -146,6 +191,47 @@ export default {
           await env.SESSIONS.delete(sid);
         }
         return json({ ok: true }, 200, { ...ch, 'Set-Cookie': setCookie('', domain, 0) });
+      }
+
+      if (url.pathname === '/recipe' && req.method === 'POST') {
+        // Auth: a valid session cookie only (same KV lookup as /refresh). The
+        // top-level CSRF guard already rejected any non-allowlisted Origin.
+        const sid = getCookie(req, COOKIE);
+        const s = sid ? await env.SESSIONS.get(sid, 'json') : null;
+        if (!s?.refresh_token) return json({ error: 'no_session' }, 401, ch);
+
+        // Without the Gemini secret the feature is off; the app hides the
+        // "Draft the recipe" button after a 501.
+        if (!env.GEMINI_API_KEY) return json({ error: 'not_configured' }, 501, ch);
+
+        // Rate-limit via a per-day KV counter (protects the free-tier quota).
+        const bucket = 'recipe:' + new Date().toISOString().slice(0, 10);
+        const used = parseInt((await env.SESSIONS.get(bucket)) || '0', 10) || 0;
+        if (used >= RECIPE_DAILY_LIMIT) return json({ error: 'rate_limited' }, 429, ch);
+
+        const { name, cuisine, diet, ingredients } = await req.json().catch(() => ({}));
+        if (!name) return json({ error: 'missing_name' }, 400, ch);
+
+        let recipe;
+        try {
+          recipe = await callRecipeModel(env, {
+            name,
+            cuisine: cuisine || 'Indian',
+            diet: diet || 'vegetarian',
+            ingredients: Array.isArray(ingredients) ? ingredients : [],
+          });
+        } catch (e) {
+          const status = parseInt(String(e).match(/recipe (\d+)/)?.[1] || '0', 10);
+          // Gemini quota exhaustion -> 429 to the app ("daily draft quota reached").
+          if (status === 429) return json({ error: 'rate_limited' }, 429, ch);
+          console.log('recipe_failed', String(e));
+          return json({ error: 'upstream' }, 502, ch);
+        }
+
+        // Count only successful drafts against the daily bucket; 2-day TTL so
+        // yesterday's bucket self-expires.
+        await env.SESSIONS.put(bucket, String(used + 1), { expirationTtl: 60 * 60 * 24 * 2 });
+        return json(recipe, 200, ch);
       }
 
       return json({ error: 'not_found' }, 404, ch);
