@@ -12,6 +12,7 @@ import { localDateStr, weekDates, dayLabel } from './lib/dates.js';
 import Today from './tabs/Today.jsx';
 import Plan from './tabs/Plan.jsx';
 import Cook from './tabs/Cook.jsx';
+import Pantry from './tabs/Pantry.jsx';
 import Track from './tabs/Track.jsx';
 import Toast from './components/Toast.jsx';
 
@@ -299,7 +300,7 @@ export default function App() {
 
   const statusKey = status.split(' ')[0];
 
-  const tabProps = { items, dishes, plans, logs, groceryItems, pantryItem, prefsItem, saveItem, deleteWithUndo, showToast };
+  const tabProps = { items, dishes, plans, logs, groceryItems, pantryItem, prefsItem, saveItem, deleteWithUndo, showToast, onNavigate: goTab };
 
   return (
     <div className="shell">
@@ -332,6 +333,7 @@ export default function App() {
       {tab === 'today' && <main className="screen"><Today {...tabProps} /></main>}
       {tab === 'plan' && <main className="screen"><Plan {...tabProps} /></main>}
       {tab === 'cook' && <main className="screen"><Cook {...tabProps} /></main>}
+      {tab === 'pantry' && <main className="screen"><Pantry {...tabProps} /></main>}
       {tab === 'track' && <main className="screen"><Track {...tabProps} /></main>}
 
       {tab === 'settings' && (
@@ -366,6 +368,14 @@ export default function App() {
               <path d="M8 10V7M12 10V5M16 10V7" strokeLinecap="round" />
             </svg>
             COOK
+          </button>
+          <button className={'tab' + (tab === 'pantry' ? ' on' : '')} onClick={() => goTab('pantry')}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
+              <path d="M6 8h12l-1 12a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1L6 8z" strokeLinejoin="round" />
+              <path d="M8 8V5a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v3" strokeLinecap="round" />
+              <path d="M10 12v5M14 12v5" strokeLinecap="round" />
+            </svg>
+            PANTRY
           </button>
           <button className={'tab' + (tab === 'track' ? ' on' : '')} onClick={() => goTab('track')}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">

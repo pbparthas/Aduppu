@@ -110,3 +110,32 @@ export function DieIcon({ size = 24, ...props }) {
     </svg>
   );
 }
+
+export function JarIcon({ size = 24, ...props }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M7 8h10l-1 12a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1L7 8z" />
+      <path d="M8 8V5a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v3" />
+      <path d="M9 3h6" />
+    </svg>
+  );
+}
+
+export function AddToPantryIcon({ size = 24, ...props }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M6 9h9l-.8 10a1 1 0 0 1-1 .9H7.8a1 1 0 0 1-1-.9L6 9z" />
+      <path d="M7 9V6.5a1 1 0 0 1 1-1h5a1 1 0 0 1 1 1V9" />
+      <path d="M18 4v6M15 7h6" />
+    </svg>
+  );
+}
+
+export function LinkIcon({ size = 24, ...props }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1" />
+      <path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1" />
+    </svg>
+  );
+}

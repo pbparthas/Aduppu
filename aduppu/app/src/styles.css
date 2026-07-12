@@ -186,6 +186,24 @@ input, textarea, button { font-family: inherit; }
   border: 1px dashed var(--line);
 }
 
+/* recipe-reference chip / link (§15.6) */
+.ref-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  text-decoration: none; cursor: pointer; max-width: 100%;
+}
+.ref-chip svg { flex: none; }
+.ref-link {
+  display: inline-flex; align-items: center; gap: 5px;
+  align-self: flex-start;
+  font-size: 12px; font-weight: 600;
+  color: var(--accent); text-decoration: none;
+  word-break: break-all;
+}
+.ref-link:hover { text-decoration: underline; }
+.ref-link svg { flex: none; }
+.ref-block { margin-bottom: 12px; }
+.ref-quickpick { display: flex; flex-direction: column; gap: 6px; }
+
 /* ---------- FSSAI diet dots (bordered-square variant) ---------- */
 .diet-dot {
   display: inline-flex; align-items: center; justify-content: center;
@@ -396,6 +414,20 @@ input, textarea, button { font-family: inherit; }
 .stat-tile .stat-label {
   font-size: 11px; font-weight: 600; letter-spacing: 0.06em;
   text-transform: uppercase; color: var(--muted);
+}
+.stat-tile.tappable {
+  cursor: pointer; position: relative; text-align: left;
+  font: inherit; width: 100%;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.stat-tile.tappable:hover { border-color: var(--accent); }
+.stat-tile.tappable:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+.stat-tile .stat-hint {
+  margin-top: 4px;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+  color: var(--accent);
 }
 
 /* ---------- week overview rows ---------- */
@@ -926,6 +958,43 @@ textarea.form-input {
   color: var(--accent);
 }
 .plan-use-text:hover { background: var(--accent); color: var(--accent-ink); }
+
+/* ---------- pantry tab ---------- */
+.pantry-section { margin-top: 20px; }
+.pantry-section:first-child { margin-top: 0; }
+.pantry-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; position: relative; min-height: 28px;
+}
+.pantry-head .icon-btn { margin: -8px -6px -8px 0; }
+.pantry-cloud { margin-top: 10px; }
+
+/* grocery entry rows */
+.grocery-row { display: flex; align-items: center; gap: 10px; }
+.grocery-main {
+  flex: 1; min-width: 0; font-size: 14px; font-weight: 600; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.grocery-amount { white-space: nowrap; font-weight: 700; }
+.grocery-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; margin-top: 8px;
+}
+.grocery-items-preview {
+  flex: 1; min-width: 0; font-size: 12px; color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* add-to-pantry button (the tracker loop) */
+.add-to-pantry {
+  display: inline-flex; align-items: center; gap: 6px; flex: none;
+  background: var(--accent-wash); color: var(--accent);
+  border: 1px solid var(--accent-line); border-radius: 999px;
+  padding: 5px 12px; font-size: 12.5px; font-weight: 600; cursor: pointer;
+  min-height: 34px; white-space: nowrap;
+}
+.add-to-pantry svg { width: 15px; height: 15px; flex: none; }
+.add-to-pantry:hover { background: var(--accent); color: var(--accent-ink); }
 
 /* ---------- a11y ---------- */
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }

@@ -8,7 +8,7 @@ import Composer from '../components/Composer.jsx';
 import SegRow from '../components/SegRow.jsx';
 import Chip from '../components/Chip.jsx';
 import EmptyState from '../components/EmptyState.jsx';
-import { SearchIcon } from '../components/Icons.jsx';
+import { SearchIcon, LinkIcon } from '../components/Icons.jsx';
 
 /* ── Constants ───────────────────────────────────────────────────────────── */
 
@@ -57,6 +57,52 @@ for (const c of CUISINES) {
 function cuisineLabel(key) { return CUISINE_LABELS[key] || key || ''; }
 
 function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
+
+/* ── Recipe-reference helpers (§15.6) ────────────────────────────────────── */
+
+// Does the ref look like a URL? Starts with http(s), or has a dot and no spaces.
+function isUrl(ref) {
+  if (!ref) return false;
+  const s = String(ref).trim();
+  if (!s) return false;
+  if (/^https?:\/\//i.test(s)) return true;
+  if (/\s/.test(s)) return false;
+  return s.includes('.');
+}
+
+// Ensure a ref has a protocol so it can be used as an href.
+function refHref(ref) {
+  const s = String(ref).trim();
+  return /^https?:\/\//i.test(s) ? s : `https://${s}`;
+}
+
+// Short display label for a URL ref.
+//  "https://instagram.com/rekhascucina" -> "instagram.com/rekhascucina"
+//  "https://youtube.com/@chefdeena"     -> "youtube.com/@chefdeena"
+//  "https://www.youtube.com/watch?v=ab" -> "youtube.com" (host only for deep URLs)
+function formatRefLabel(ref) {
+  let s = String(ref).trim()
+    .replace(/^https?:\/\//i, '')
+    .replace(/\/+$/, '')
+    .replace(/^www\./i, '');
+  const slash = s.indexOf('/');
+  if (slash === -1) return s; // bare host / handle
+  const host = s.slice(0, slash);
+  const path = s.slice(slash + 1).split('?')[0].split('#')[0];
+  const segs = path.split('/').filter(Boolean);
+  if (segs.length === 0) return host;
+  const first = segs[0];
+  // A single, clean handle/channel segment -> host/segment; otherwise host only.
+  if (segs.length === 1 && first !== 'watch' && !/[=&]/.test(first)) {
+    return `${host}/${first}`;
+  }
+  return host;
+}
+
+// Base URL to fill into the field from a quick-pick label.
+function baseToUrl(base) {
+  return /^https?:\/\//i.test(base) ? base : `https://${base}`;
+}
 
 /* ═════════════════════════════════════════════════════════════════════════ */
 /* Cook                                                                     */
@@ -119,6 +165,23 @@ export default function Cook({
     () => dishes.filter((d) => !d.deleted),
     [dishes],
   );
+
+  // §15.6 recent sources: top-5 most-used distinct URL ref hosts/handles,
+  // derived from the catalog (no hardcoded creator list).
+  const recentSources = useMemo(() => {
+    const counts = new Map();
+    for (const d of activeDishes) {
+      const r = (d.ref || '').trim();
+      if (!r || !isUrl(r)) continue;
+      const base = formatRefLabel(r);
+      if (!base) continue;
+      counts.set(base, (counts.get(base) || 0) + 1);
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([base]) => base);
+  }, [activeDishes]);
 
   // Flat cuisine options for the Composer select
   const cuisineOptions = useMemo(() => {
@@ -238,7 +301,6 @@ export default function Cook({
   const editFields = useMemo(() => [
     { key: 'name', label: 'Dish name', type: 'text', placeholder: 'Dish name' },
     { key: 'ingredients', label: 'Ingredients (comma-separated)', type: 'textarea', placeholder: 'rice, toor dal, tomato...' },
-    { key: 'ref', label: 'Reference', type: 'text', placeholder: 'Book, URL, or person' },
     { key: 'notes', label: 'Notes', type: 'textarea', placeholder: 'Prep notes...' },
     { key: 'meal', label: 'Meal', type: 'select', options: MEAL_OPTIONS },
     { key: 'cuisine', label: 'Cuisine', type: 'select', options: cuisineOptions },
@@ -274,6 +336,10 @@ export default function Cook({
   const closeEditSheet = useCallback(() => {
     setEditDishId(null);
     setEditValues({});
+  }, []);
+
+  const fillRef = useCallback((base) => {
+    setEditValues((v) => ({ ...v, ref: baseToUrl(base) }));
   }, []);
 
   const saveEditDish = useCallback(() => {
@@ -734,6 +800,52 @@ export default function Cook({
       {/* ════════════════════════════════════════════════════════════════════ */}
       {editDishId && (
         <Sheet title={editValues.name || 'Edit dish'} onClose={closeEditSheet}>
+          {/* Reference field (custom, so we can show a link + recent-source
+              quick-pick below it — §15.6) */}
+          <div className="form-stack ref-block">
+            <label className="form-label">
+              <span className="form-label-text">Reference</span>
+              <input
+                type="text"
+                className="form-input"
+                value={editValues.ref ?? ''}
+                placeholder="Recipe source — link, book, or person (e.g. an Instagram reel or YouTube video)"
+                onChange={(e) => setEditValues({ ...editValues, ref: e.target.value })}
+              />
+            </label>
+
+            {isUrl(editValues.ref) && (
+              <a
+                className="ref-link"
+                href={refHref(editValues.ref)}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <LinkIcon size={14} />
+                {formatRefLabel(editValues.ref)}
+              </a>
+            )}
+
+            {recentSources.length > 0 && (
+              <div className="ref-quickpick">
+                <span className="form-label-text">Recent sources</span>
+                <div className="chip-row">
+                  {recentSources.map((src) => (
+                    <button
+                      key={src}
+                      type="button"
+                      className="chip plain ref-chip"
+                      onClick={() => fillRef(src)}
+                    >
+                      <LinkIcon size={11} />
+                      {src}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
           <Composer
             fields={editFields}
             values={editValues}
@@ -834,6 +946,19 @@ function DishCard({ dish, onTap }) {
           <div className="task-sub">
             {dish.cuisine && (
               <Chip type="cuisine">{cuisineLabel(dish.cuisine)}</Chip>
+            )}
+            {isUrl(dish.ref) && (
+              <a
+                className="chip plain ref-chip"
+                href={refHref(dish.ref)}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                aria-label={`Open recipe source ${formatRefLabel(dish.ref)}`}
+              >
+                <LinkIcon size={11} />
+                {formatRefLabel(dish.ref)}
+              </a>
             )}
             {preview.length > 0 && (
               <span className="lead">

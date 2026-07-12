@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useCallback, useRef } from 'react';
 import { localDateStr, addDays, dayLabel } from '../lib/dates.js';
-import { newItem } from '../lib/merge.js';
 import SegRow from '../components/SegRow.jsx';
 import Chip from '../components/Chip.jsx';
 import Sheet from '../components/Sheet.jsx';
@@ -38,19 +37,13 @@ const MODE_OPTIONS = [
   { value: 'out',  label: 'Ordered' },
 ];
 
-const GROCERY_EDIT_FIELDS = [
-  { key: 'amount', label: 'Amount',  type: 'number', placeholder: 'Amount in rupees' },
-  { key: 'note',   label: 'Note',    type: 'text',   placeholder: 'What was it for?' },
-  { key: 'date',   label: 'Date',    type: 'date' },
-];
-
 // =========================================================================
 // Track
 // =========================================================================
 
 export default function Track({
   items, dishes, plans, logs, groceryItems,
-  pantryItem, prefsItem, saveItem, deleteWithUndo, showToast,
+  pantryItem, prefsItem, saveItem, deleteWithUndo, showToast, onNavigate,
 }) {
   // -- State ---------------------------------------------------------------
 
@@ -58,18 +51,9 @@ export default function Track({
   const [selMode, setSelMode]     = useState(false);
   const [selIds, setSelIds]       = useState(new Set());
 
-  // Grocery add
-  const [addingGrocery, setAddingGrocery]     = useState(false);
-  const [groceryAmount, setGroceryAmount]     = useState('');
-  const [groceryNote, setGroceryNote]         = useState('');
-  const [groceryDate, setGroceryDate]         = useState(() => localDateStr());
-  const [showGroceryDate, setShowGroceryDate] = useState(false);
-
   // Edit sheets
-  const [editingLog, setEditingLog]               = useState(null);
-  const [editLogValues, setEditLogValues]         = useState({});
-  const [editingGrocery, setEditingGrocery]       = useState(null);
-  const [editGroceryValues, setEditGroceryValues] = useState({});
+  const [editingLog, setEditingLog]       = useState(null);
+  const [editLogValues, setEditLogValues] = useState({});
 
   // Optional date filter for the log list
   const [pickedDate, setPickedDate]       = useState(null);
@@ -149,21 +133,6 @@ export default function Track({
     [logsByDate],
   );
 
-  // -- Grocery sorted by date descending -----------------------------------
-
-  const sortedGrocery = useMemo(
-    () => [...filteredGrocery].sort((a, b) =>
-      (b.date || '').localeCompare(a.date || '')),
-    [filteredGrocery],
-  );
-
-  // -- Grocery add validation ----------------------------------------------
-
-  const isGroceryValid = useMemo(() => {
-    const amount = parseFloat(groceryAmount);
-    return !isNaN(amount) && amount > 0;
-  }, [groceryAmount]);
-
   // -- Handlers: range -----------------------------------------------------
 
   const handleRangeChange = useCallback((newRange) => {
@@ -171,71 +140,6 @@ export default function Track({
     setPickedDate(null);
     setShowDatePicker(false);
   }, []);
-
-  // -- Handlers: grocery add -----------------------------------------------
-
-  const startGroceryAdd = useCallback(() => {
-    setAddingGrocery(true);
-    setGroceryDate(localDateStr());
-    setGroceryAmount('');
-    setGroceryNote('');
-    setShowGroceryDate(false);
-  }, []);
-
-  const cancelGroceryAdd = useCallback(() => {
-    setAddingGrocery(false);
-    setShowGroceryDate(false);
-  }, []);
-
-  const handleAddGrocery = useCallback(() => {
-    const amount = parseFloat(groceryAmount);
-    if (isNaN(amount) || amount <= 0) return;
-    saveItem(newItem({
-      type: 'grocery',
-      date: groceryDate || localDateStr(),
-      amount,
-      note: groceryNote.trim(),
-    }));
-    setGroceryAmount('');
-    setGroceryNote('');
-    setGroceryDate(localDateStr());
-    setShowGroceryDate(false);
-    setAddingGrocery(false);
-    if (showToast) showToast('Grocery entry added');
-  }, [groceryAmount, groceryDate, groceryNote, saveItem, showToast]);
-
-  // -- Handlers: grocery edit (Sheet + Composer) ---------------------------
-
-  const openGroceryEdit = useCallback((grocery) => {
-    setEditingGrocery(grocery);
-    setEditGroceryValues({
-      amount: grocery.amount || 0,
-      note:   grocery.note || '',
-      date:   grocery.date || localDateStr(),
-    });
-  }, []);
-
-  const closeGroceryEdit = useCallback(() => {
-    setEditingGrocery(null);
-    setEditGroceryValues({});
-  }, []);
-
-  const saveGroceryEdit = useCallback(() => {
-    if (!editingGrocery) return;
-    saveItem({
-      ...editingGrocery,
-      amount: Number(editGroceryValues.amount) || 0,
-      note:   editGroceryValues.note,
-      date:   editGroceryValues.date,
-    });
-    closeGroceryEdit();
-  }, [editingGrocery, editGroceryValues, saveItem, closeGroceryEdit]);
-
-  const deleteGroceryItem = useCallback(() => {
-    if (!editingGrocery) return;
-    deleteWithUndo(editingGrocery);
-    closeGroceryEdit();
-  }, [editingGrocery, deleteWithUndo, closeGroceryEdit]);
 
   // -- Handlers: log edit (Sheet + Composer) -------------------------------
 
@@ -371,100 +275,16 @@ export default function Track({
             <div className="stat-num">{formatCurrency(stats.orderSpend)}</div>
             <div className="stat-label">Order Spend</div>
           </div>
-          <div className="stat-tile">
+          <button
+            type="button"
+            className="stat-tile tappable"
+            onClick={() => onNavigate && onNavigate('pantry')}
+          >
             <div className="stat-num">{formatCurrency(stats.grocerySpend)}</div>
             <div className="stat-label">Grocery Spend</div>
-          </div>
-        </div>
-      </div>
-
-      {/* -- Grocery section -- */}
-      <div className="section">
-        <span className="eyebrow">Groceries</span>
-
-        {addingGrocery ? (
-          <div className="list">
-            <div className="card">
-              <div className="form-stack">
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  placeholder="Amount"
-                  value={groceryAmount}
-                  onChange={(e) => setGroceryAmount(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleAddGrocery(); }}
-                  autoFocus
-                  className="form-input"
-                />
-                <input
-                  type="text"
-                  placeholder="Note (optional)"
-                  value={groceryNote}
-                  onChange={(e) => setGroceryNote(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleAddGrocery(); }}
-                  className="form-input"
-                />
-                {showGroceryDate ? (
-                  <input
-                    type="date"
-                    value={groceryDate}
-                    onChange={(e) => setGroceryDate(e.target.value)}
-                    className="form-input"
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    className="btn ghost"
-                    onClick={() => setShowGroceryDate(true)}
-                  >
-                    Change date
-                  </button>
-                )}
-              </div>
-              <div className="btn-row">
-                <button type="button" className="btn ghost" onClick={cancelGroceryAdd}>
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="btn accent"
-                  onClick={handleAddGrocery}
-                  disabled={!isGroceryValid}
-                >
-                  Add
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <button type="button" className="add-task" onClick={startGroceryAdd}>
-            <span className="plus">+</span>
-            Add grocery entry
+            <span className="stat-hint">View &rarr;</span>
           </button>
-        )}
-
-        {sortedGrocery.length > 0 && (
-          <div className="list">
-            {sortedGrocery.map((g) => (
-              <div
-                key={g.id}
-                className="card"
-                role="button"
-                tabIndex={0}
-                onClick={() => openGroceryEdit(g)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') openGroceryEdit(g);
-                }}
-              >
-                <div className="task-row">
-                  <span className="lead">{dayLabel(g.date)}</span>
-                  <span className="task-main">{g.note || 'Groceries'}</span>
-                  <strong>{formatCurrency(g.amount)}</strong>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        </div>
       </div>
 
       {/* -- Meal log section -- */}
@@ -579,20 +399,6 @@ export default function Track({
             onSave={saveLogEdit}
             onCancel={closeLogEdit}
             onDelete={deleteLogItem}
-          />
-        </Sheet>
-      )}
-
-      {/* -- Grocery edit Sheet -- */}
-      {editingGrocery && (
-        <Sheet title="Edit grocery entry" onClose={closeGroceryEdit}>
-          <Composer
-            fields={GROCERY_EDIT_FIELDS}
-            values={editGroceryValues}
-            onChange={setEditGroceryValues}
-            onSave={saveGroceryEdit}
-            onCancel={closeGroceryEdit}
-            onDelete={deleteGroceryItem}
           />
         </Sheet>
       )}
