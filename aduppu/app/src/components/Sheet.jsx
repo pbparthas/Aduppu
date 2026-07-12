@@ -43,6 +43,10 @@ export default function Sheet({ title, children, onClose, wide }) {
     previousFocus.current = document.activeElement;
     document.addEventListener('keydown', handleKeyDown);
 
+    /* Signal to the app that a bottom sheet is open, so the toast can lift
+       to the top of the screen and never overlap the sheet's action row. */
+    document.body.classList.add('sheet-open');
+
     /* Focus the panel so keyboard users land inside */
     if (panelRef.current) {
       const firstFocusable = panelRef.current.querySelector(
@@ -54,6 +58,7 @@ export default function Sheet({ title, children, onClose, wide }) {
 
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
+      document.body.classList.remove('sheet-open');
       if (previousFocus.current && previousFocus.current.focus) {
         previousFocus.current.focus();
       }

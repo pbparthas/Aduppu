@@ -121,6 +121,28 @@ const DIET_OPTIONS = [
   { key: 'all', label: 'Everything', color: '#c62828' },
 ];
 
+// R2-1 / A11 one-time cleanup: older builds force-added a parent region key
+// whenever a sub-cuisine was picked. Under the new model a region key means
+// "the whole region" (expandCuisines() adds the subs at query time), so a
+// region key alongside only SOME of its subs is a bug artifact -- drop it so
+// the region renders in its partial (minus-square) state. A region key with
+// ALL of its subs is a genuine "whole region" selection and is kept.
+// Returns a cleaned key array, or null when nothing needed changing.
+function migratePartialRegions(cuisines) {
+  const set = new Set(cuisines);
+  let changed = false;
+  for (const region of CUISINES) {
+    if (!region.subs || region.subs.length === 0) continue;
+    if (!set.has(region.key)) continue;
+    const subsPresent = region.subs.filter((s) => set.has(s.key)).length;
+    if (subsPresent > 0 && subsPresent < region.subs.length) {
+      set.delete(region.key);
+      changed = true;
+    }
+  }
+  return changed ? [...set] : null;
+}
+
 export default function App() {
   const [clientId, setClientId] = useState(() => localStorage.getItem('ad_client_id') || DEFAULT_CLIENT_ID);
   const [signedIn, setSignedIn] = useState(false);
@@ -139,7 +161,12 @@ export default function App() {
   const [showSignIn, setShowSignIn] = useState(() =>
     localStorage.getItem('ad_signed_in') !== '1' && localStorage.getItem('ad_skip_signin') !== '1');
 
-  const goTab = (t) => { setQuery(''); setTab(t); };
+  const goTab = (t) => {
+    setQuery('');
+    setToastState(null); // dismiss any active toast on navigation
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setTab(t);
+  };
 
   const showToast = useCallback((msg, undoFn) => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -239,6 +266,18 @@ export default function App() {
   const groceryItems = useMemo(() => items.filter((i) => i.type === 'grocery' && !i.deleted), [items]);
   const pantryItem = useMemo(() => items.find((i) => i.id === 'pantry') || null, [items]);
   const prefsItem = useMemo(() => items.find((i) => i.id === 'prefs') || null, [items]);
+
+  // R2-1 / A11 one-time migration: strip force-added parent region keys that
+  // left a region in a false "full" state. Runs once per load; saveItem sets
+  // dirty=1 so the cleanup syncs to Drive.
+  const cuisineMigrated = useRef(false);
+  useEffect(() => {
+    if (cuisineMigrated.current) return;
+    if (!prefsItem || !Array.isArray(prefsItem.cuisines)) return;
+    cuisineMigrated.current = true;
+    const cleaned = migratePartialRegions(prefsItem.cuisines);
+    if (cleaned) saveItem({ id: 'prefs', cuisines: cleaned });
+  }, [prefsItem]);
 
   // --- Gates ---
   if (!clientId) return <SetupScreen onSave={(id) => { localStorage.setItem('ad_client_id', id); setClientId(id); }} />;
@@ -374,15 +413,14 @@ function OnboardingScreen({ saveItem, store, engine, refresh }) {
         const parent = pickable.find((c) => c.subs?.some((s) => s.key === key));
         if (next.has(key)) {
           next.delete(key);
-          // If no subs remain, remove the parent region too
-          if (parent && parent.subs.every((s) => !next.has(s.key))) {
-            next.delete(parent.key);
-          }
+          // Deselecting a sub means this is no longer the whole region, so
+          // drop the parent region key if it was set ("whole region").
+          if (parent) next.delete(parent.key);
         } else {
           next.add(key);
-          // Add parent region key (region-level dishes are the common base)
-          if (parent) next.add(parent.key);
-          // If all subs are now selected, that's fine -- equivalent to region
+          // Do NOT add the parent region key -- expandCuisines() already
+          // covers the region base for a region:sub key at query time.
+          // Storing only the sub keeps the region row in its PARTIAL state.
         }
       }
       return next;
@@ -496,7 +534,7 @@ function CuisinePicker({ pickable, selected, expandedRegion, setExpandedRegion, 
           <div key={region.key} className="cuisine-group">
             <div className="cuisine-row" onClick={() => onToggle(region.key)}>
               <span className={'cuisine-check ' + checkClass}>
-                {(regionOn || allSubsOn || someSubsOn) ? '✓' : ''}
+                {(regionOn || allSubsOn) ? '✓' : someSubsOn ? '−' : ''}
               </span>
               <span className="cuisine-name">{region.label}</span>
               {hasSubs && (
@@ -600,12 +638,14 @@ function Settings({ mode, setAppMode, signedIn, status, statusKey, onSignIn, onS
       const parent = pickable.find((c) => c.subs?.some((s) => s.key === key));
       if (next.has(key)) {
         next.delete(key);
-        if (parent && parent.subs.every((s) => !next.has(s.key))) {
-          next.delete(parent.key);
-        }
+        // Deselecting a sub means this is no longer the whole region, so
+        // drop the parent region key if it was set ("whole region").
+        if (parent) next.delete(parent.key);
       } else {
         next.add(key);
-        if (parent) next.add(parent.key);
+        // Do NOT add the parent region key -- expandCuisines() covers the
+        // region base for a region:sub key. Storing only the sub keeps the
+        // region row in its PARTIAL state (minus-square, not full ✓).
       }
     }
 

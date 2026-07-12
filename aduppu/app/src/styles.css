@@ -630,7 +630,9 @@ input, textarea, button { font-family: inherit; }
   color: transparent; transition: background .12s, border-color .12s;
 }
 .cuisine-check.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-.cuisine-check.partial { border-color: var(--accent); background: var(--accent-wash); color: var(--accent); }
+/* Partial (minus-square): some but not all subs selected -- distinct from the
+   solid ✓ "whole region" state. Accent outline + wash fill + bold minus glyph. */
+.cuisine-check.partial { border-color: var(--accent); background: var(--accent-wash); color: var(--accent); font-weight: 700; font-size: 15px; }
 .cuisine-name { flex: 1; }
 .cuisine-hint { font-size: 12px; color: var(--muted); font-weight: 400; }
 .cuisine-chev {
@@ -676,6 +678,12 @@ input, textarea, button { font-family: inherit; }
   white-space: nowrap;
   animation: toast-in .2s ease-out;
 }
+/* When a bottom sheet is open, lift the toast to the top so it never overlaps
+   the sheet's Save/Cancel/Delete action row (sheets slide up from the bottom). */
+body.sheet-open .toast {
+  bottom: auto;
+  top: calc(env(safe-area-inset-top) + 12px);
+}
 .toast-undo {
   background: none; border: none; cursor: pointer;
   color: var(--accent); font-weight: 700; font-size: 14px;
@@ -714,6 +722,12 @@ input, textarea, button { font-family: inherit; }
 .form-input:focus {
   outline: none;
   border-color: var(--accent);
+}
+textarea.form-input {
+  min-height: 72px;
+  resize: vertical;
+  font-family: inherit;
+  line-height: 1.4;
 }
 
 /* ---------- icon button ---------- */
@@ -777,6 +791,15 @@ input, textarea, button { font-family: inherit; }
 }
 .form-input select { appearance: none; }
 .composer-delete { color: var(--overdue) !important; }
+
+/* seg selectors inside a composer form: let buttons wrap/shrink so a
+   3-item row (Breakfast/Lunch/Dinner) never overflows a narrow sheet */
+.form-label .seg { flex-wrap: wrap; }
+.form-label .seg button {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 8px 10px;
+}
 
 /* ---------- today tab ---------- */
 .today-header { margin-bottom: 14px; }

@@ -334,8 +334,8 @@ export default function Track({
   const logEditFields = useMemo(() => {
     const fields = [
       { key: 'dish', label: 'Dish',  type: 'text',   placeholder: 'Dish name' },
-      { key: 'meal', label: 'Meal',  type: 'select', options: MEAL_OPTIONS },
-      { key: 'mode', label: 'Mode',  type: 'select', options: MODE_OPTIONS },
+      { key: 'meal', label: 'Meal',  type: 'seg', options: MEAL_OPTIONS },
+      { key: 'mode', label: 'Type',  type: 'seg', options: MODE_OPTIONS },
     ];
     if (editLogValues.mode === 'out') {
       fields.push({ key: 'cost', label: 'Cost', type: 'number', placeholder: 'Amount' });

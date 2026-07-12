@@ -1,6 +1,8 @@
 /* Composer — labelled-field stack with explicit Save/Cancel for editing and adding items.
    One editing model everywhere: no save-on-blur, no fake buttons. */
 
+import SegRow from './SegRow.jsx';
+
 export default function Composer({
   fields,
   values,
@@ -32,6 +34,15 @@ export default function Composer({
               </option>
             ))}
           </select>
+        );
+
+      case 'seg':
+        return (
+          <SegRow
+            items={(field.options || []).map((o) => ({ key: o.value, label: o.label }))}
+            value={val}
+            onChange={(key) => handleFieldChange(field.key, key)}
+          />
         );
 
       case 'textarea':
