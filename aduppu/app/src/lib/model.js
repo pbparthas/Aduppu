@@ -126,6 +126,7 @@ export const SEEDS = {
   // =========================================================================
   'tamil-nadu': {
     breakfast: [
+      V('Idli', ['idli rice', 'urad dal', 'salt'], ['comfort', 'quick']),
       V('Idli with Sambar', ['rice', 'urad dal', 'toor dal', 'tamarind', 'drumstick', 'sambar powder'], ['comfort']),
       V('Masala Dosa', ['rice', 'urad dal', 'potato', 'onion', 'mustard', 'turmeric', 'oil'], ['popular']),
       V('Plain Dosa with Coconut Chutney', ['rice', 'urad dal', 'coconut', 'green chilli', 'oil']),

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { matchDish, normalize, STAPLES } from '../src/lib/kitchen.js';
+import { SEEDS } from '../src/lib/model.js';
 
 describe('normalize', () => {
   it('lowercases and trims', () => {
@@ -236,5 +237,47 @@ describe('matchDish', () => {
     expect(result.totalCount).toBe(0); // 3 - 3
     expect(result.status).toBe('full');
     expect(result.score).toBe(1);
+  });
+});
+
+// R2-6: seed vocabulary smoke test — the idli/dosa family must be cookable
+// from a minimal pantry with staples on. Guards against seed vocabulary drift
+// (e.g. "idli rice" not aliasing to "rice") breaking the app's core promise.
+describe('R2-6 seed vocabulary smoke test', () => {
+  const tnBreakfast = SEEDS['tamil-nadu'].breakfast;
+
+  it('Idli is a full match with pantry [rice, urad dal, salt] + staples', () => {
+    const idli = tnBreakfast.find((d) => d.name === 'Idli');
+    expect(idli).toBeTruthy();
+    const result = matchDish(idli, ['rice', 'urad dal', 'salt'], { staplesOn: true });
+    expect(result.status).toBe('full');
+  });
+
+  it('at least one idli/dosa dish is fully cookable from a minimal pantry', () => {
+    const pantry = ['rice', 'urad dal', 'salt'];
+    const cookable = tnBreakfast.filter(
+      (d) => matchDish(d, pantry, { staplesOn: true }).status === 'full',
+    );
+    expect(cookable.length).toBeGreaterThan(0);
+  });
+
+  it('idli rice / dosa rice / parboiled rice all alias to rice', () => {
+    expect(normalize('idli rice')).toBe('rice');
+    expect(normalize('dosa rice')).toBe('rice');
+    expect(normalize('parboiled rice')).toBe('rice');
+    expect(normalize('boiled rice')).toBe('rice');
+  });
+
+  it('every seed ingredient normalizes without throwing', () => {
+    for (const cuisineKey of Object.keys(SEEDS)) {
+      const cat = SEEDS[cuisineKey];
+      for (const meal of ['breakfast', 'lunch', 'dinner']) {
+        for (const dish of cat[meal] || []) {
+          for (const ing of dish.ingredients) {
+            expect(typeof normalize(ing)).toBe('string');
+          }
+        }
+      }
+    }
   });
 });
