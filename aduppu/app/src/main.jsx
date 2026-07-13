@@ -13,7 +13,12 @@ import '@fontsource/caveat/700.css';
 import { registerSW } from 'virtual:pwa-register';
 
 import App from './App.jsx';
+import { getMode, applyMode } from './lib/theme.js';
 import './styles.css';
+
+// Apply the saved appearance mode before first paint so a dark-mode user
+// never sees a paper flash, and the choice actually persists across reloads.
+applyMode(getMode());
 
 // Offline app shell. autoUpdate installs a new build and reloads on its own;
 // re-check hourly so long-lived sessions don't go stale.
